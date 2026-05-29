@@ -1,0 +1,2505 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VS Code Web - Browser Replica</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='%23007ACC' d='M70 10L30 40l-20-10v40l20-10 40 30V10z'/%3E%3C/svg%3E">
+    <script>
+    // Dynamically load Monaco loader with fallback
+    (function() {
+        var s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js';
+        s.onerror = function() { window.__monacoLoaderFailed = true; };
+        document.head.appendChild(s);
+    })();
+    </script>
+    <style>
+        :root {
+            --bg: #1e1e1e; --sidebar-bg: #252526; --activity-bar-bg: #333333;
+            --panel-bg: #1e1e1e; --tab-bg: #2d2d2d; --tab-active: #1e1e1e;
+            --tab-border: #252526; --fg: #cccccc; --fg-dim: #858585;
+            --accent: #007acc; --accent-hover: #1177bb; --border: #454545;
+            --selection: #264f78; --hover: #2a2d2e; --error: #f14c4c;
+            --warning: #cca700; --success: #89d185; --info: #75beff;
+            --menu-bg: #252526; --menu-hover: #094771;
+            --status-bar-bg: #007acc; --status-bar-fg: #ffffff;
+            --badge: #bf2e2e;
+            --font-ui: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", sans-serif;
+            --font-mono: "Cascadia Code", "Fira Code", "SF Mono", Monaco, Menlo, Consolas, monospace;
+        }
+        .theme-light {
+            --bg: #ffffff; --sidebar-bg: #f3f3f3; --activity-bar-bg: #2c2c2c;
+            --panel-bg: #f8f8f8; --tab-bg: #ececec; --tab-active: #ffffff;
+            --tab-border: #e0e0e0; --fg: #333333; --fg-dim: #808080;
+            --border: #e0e0e0; --selection: #add6ff; --hover: #e8e8e8;
+            --menu-bg: #ffffff;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--font-ui); background: var(--bg); color: var(--fg); overflow: hidden; height: 100vh; width: 100vw; }
+        #app { display: flex; flex-direction: column; height: 100vh; width: 100vw; }
+        .menu-bar { height: 30px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 10px; font-size: 13px; user-select: none; z-index: 1000; }
+        .menu-item { padding: 0 10px; height: 100%; display: flex; align-items: center; cursor: pointer; position: relative; }
+        .menu-item:hover { background: var(--hover); }
+        .menu-dropdown { position: absolute; top: 100%; left: 0; background: var(--menu-bg); border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.4); min-width: 220px; display: none; z-index: 1001; }
+        .menu-dropdown.active { display: block; }
+        .menu-dropdown-item { padding: 6px 20px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+        .menu-dropdown-item:hover { background: var(--menu-hover); color: #fff; }
+        .menu-dropdown-item .shortcut { color: var(--fg-dim); font-size: 12px; }
+        .menu-separator { height: 1px; background: var(--border); margin: 4px 0; }
+        .workbench { display: flex; flex: 1; overflow: hidden; }
+        .activity-bar { width: 48px; background: var(--activity-bar-bg); display: flex; flex-direction: column; align-items: center; padding-top: 8px; flex-shrink: 0; }
+        .activity-icon { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; color: var(--fg-dim); }
+        .activity-icon:hover { color: var(--fg); }
+        .activity-icon.active { color: var(--fg); }
+        .activity-icon.active::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 2px; background: var(--fg); }
+        .sidebar { width: 260px; background: var(--sidebar-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden; }
+        .sidebar-header { height: 35px; padding: 0 12px; display: flex; align-items: center; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--fg-dim); border-bottom: 1px solid var(--border); }
+        .sidebar-content { flex: 1; overflow: auto; }
+        .file-tree { padding: 4px 0; font-size: 13px; }
+        .tree-item { display: flex; align-items: center; padding: 4px 12px 4px 20px; cursor: pointer; white-space: nowrap; }
+        .tree-item:hover { background: var(--hover); }
+        .tree-item.selected { background: var(--selection); }
+        .tree-icon { margin-right: 6px; font-size: 16px; width: 16px; text-align: center; }
+        .tree-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+        .tree-children { display: none; }
+        .tree-children.expanded { display: block; }
+        .tree-toggle { width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; margin-right: 2px; font-size: 10px; cursor: pointer; }
+        .editor-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+        .tab-bar { height: 35px; background: var(--tab-bg); display: flex; align-items: center; overflow-x: auto; overflow-y: hidden; border-bottom: 1px solid var(--tab-border); }
+        .tab { height: 35px; padding: 0 12px; display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; border-right: 1px solid var(--tab-border); min-width: 120px; max-width: 200px; background: var(--tab-bg); position: relative; }
+        .tab.active { background: var(--tab-active); border-bottom: 1px solid var(--accent); }
+        .tab:hover { background: var(--tab-active); }
+        .tab-dirty { width: 8px; height: 8px; border-radius: 50%; background: var(--fg); flex-shrink: 0; }
+        .tab-close { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; border-radius: 3px; opacity: 0; }
+        .tab:hover .tab-close, .tab.active .tab-close { opacity: 1; }
+        .tab-close:hover { background: var(--error); color: #fff; }
+        .editor-container { flex: 1; overflow: hidden; position: relative; }
+        .editor-instance { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: none; }
+        .editor-instance.active { display: block; }
+        .empty-editor { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--fg-dim); font-size: 14px; flex-direction: column; gap: 16px; }
+        .empty-editor-logo { font-size: 80px; opacity: 0.3; }
+        .panel { height: 200px; min-height: 100px; background: var(--panel-bg); border-top: 1px solid var(--border); display: flex; flex-direction: column; }
+        .panel-tabs { height: 35px; display: flex; align-items: center; padding: 0 12px; gap: 16px; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; font-weight: 600; color: var(--fg-dim); }
+        .panel-tab { cursor: pointer; padding: 8px 4px; border-bottom: 2px solid transparent; }
+        .panel-tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+        .panel-content { flex: 1; overflow: auto; padding: 8px 12px; font-family: var(--font-mono); font-size: 13px; line-height: 1.5; }
+        .terminal-container { height: 100%; display: flex; flex-direction: column; }
+        .terminal-tabs { display: flex; gap: 4px; padding: 4px 12px; border-bottom: 1px solid var(--border); }
+        .terminal-tab { padding: 4px 12px; font-size: 12px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 6px; }
+        .terminal-tab.active { background: var(--hover); }
+        .terminal-tab-close { opacity: 0; }
+        .terminal-tab:hover .terminal-tab-close { opacity: 1; }
+        .terminal-output { flex: 1; overflow-y: auto; padding: 8px 12px; font-family: var(--font-mono); font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
+        .terminal-line { margin: 2px 0; }
+        .terminal-prompt { display: flex; align-items: center; gap: 6px; }
+        .terminal-input { background: transparent; border: none; outline: none; color: var(--fg); font-family: var(--font-mono); font-size: 13px; flex: 1; caret-color: var(--fg); }
+        .terminal-welcome { color: var(--fg-dim); margin-bottom: 8px; }
+        .problem-item { padding: 6px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; border-radius: 4px; }
+        .problem-item:hover { background: var(--hover); }
+        .problem-severity { width: 16px; text-align: center; }
+        .problem-warning { color: var(--warning); }
+        .problem-error { color: var(--error); }
+        .output-channel { margin-bottom: 12px; }
+        .output-header { color: var(--accent); font-weight: bold; margin-bottom: 4px; }
+        .output-line { color: var(--fg-dim); }
+        .debug-eval { display: flex; gap: 8px; margin-bottom: 8px; padding: 8px; background: var(--bg); border-radius: 4px; }
+        .debug-eval input { flex: 1; background: transparent; border: 1px solid var(--border); color: var(--fg); padding: 4px 8px; font-family: var(--font-mono); font-size: 13px; border-radius: 3px; }
+        .debug-result { padding: 4px 8px; color: var(--success); }
+        .debug-error { color: var(--error); }
+        .status-bar { height: 22px; background: var(--status-bar-bg); color: var(--status-bar-fg); display: flex; align-items: center; justify-content: space-between; padding: 0 8px; font-size: 12px; user-select: none; }
+        .status-left, .status-right { display: flex; align-items: center; gap: 12px; }
+        .status-item { cursor: pointer; padding: 2px 6px; border-radius: 3px; }
+        .status-item:hover { background: rgba(255,255,255,0.1); }
+        .extensions-list { padding: 8px; }
+        .extension-card { padding: 12px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s; }
+        .extension-card:hover { border-color: var(--accent); background: var(--hover); }
+        .extension-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+        .extension-icon { width: 40px; height: 40px; border-radius: 8px; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+        .extension-info { flex: 1; }
+        .extension-name { font-weight: 600; font-size: 14px; }
+        .extension-desc { font-size: 12px; color: var(--fg-dim); margin-top: 2px; }
+        .extension-actions { display: flex; gap: 8px; margin-top: 8px; }
+        .btn { padding: 4px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-family: var(--font-ui); transition: all 0.2s; }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-secondary { background: var(--hover); color: var(--fg); border: 1px solid var(--border); }
+        .btn-secondary:hover { background: var(--border); }
+        .ai-panel { display: flex; flex-direction: column; height: 100%; }
+        .ai-chat { flex: 1; overflow-y: auto; padding: 12px; }
+        .ai-message { margin-bottom: 12px; padding: 10px 14px; border-radius: 8px; max-width: 90%; word-wrap: break-word; }
+        .ai-message.user { background: var(--accent); color: #fff; margin-left: auto; }
+        .ai-message.assistant { background: var(--hover); border: 1px solid var(--border); }
+        .ai-input-area { padding: 12px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+        .ai-input { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--fg); padding: 8px 12px; border-radius: 6px; font-family: var(--font-ui); font-size: 13px; outline: none; }
+        .ai-input:focus { border-color: var(--accent); }
+        .search-box { padding: 12px; border-bottom: 1px solid var(--border); }
+        .search-input { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--fg); padding: 6px 10px; border-radius: 4px; font-size: 13px; outline: none; margin-bottom: 8px; }
+        .search-input:focus { border-color: var(--accent); }
+        .search-options { display: flex; gap: 8px; font-size: 11px; color: var(--fg-dim); }
+        .search-option { cursor: pointer; padding: 2px 6px; border-radius: 3px; }
+        .search-option:hover { background: var(--hover); }
+        .search-results { padding: 8px; }
+        .search-result-item { padding: 6px 8px; cursor: pointer; border-radius: 4px; font-size: 12px; }
+        .search-result-item:hover { background: var(--hover); }
+        .search-result-file { color: var(--accent); font-weight: 600; }
+        .search-result-line { color: var(--fg-dim); margin-left: 16px; }
+        .scm-section { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+        .scm-header { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--fg-dim); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .scm-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; cursor: pointer; border-radius: 4px; font-size: 12px; }
+        .scm-item:hover { background: var(--hover); }
+        .scm-status { width: 16px; text-align: center; }
+        .scm-modified { color: var(--warning); }
+        .scm-added { color: var(--success); }
+        .scm-deleted { color: var(--error); }
+        .scm-commit-box { padding: 12px; }
+        .scm-commit-input { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--fg); padding: 8px; border-radius: 4px; font-size: 13px; resize: none; height: 60px; margin-bottom: 8px; }
+        .command-palette-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 2000; display: none; align-items: flex-start; justify-content: center; padding-top: 100px; }
+        .command-palette-overlay.active { display: flex; }
+        .command-palette { width: 600px; max-width: 90vw; background: var(--menu-bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); overflow: hidden; }
+        .command-palette-input { width: 100%; background: transparent; border: none; border-bottom: 1px solid var(--border); color: var(--fg); padding: 12px 16px; font-size: 16px; outline: none; }
+        .command-palette-list { max-height: 400px; overflow-y: auto; }
+        .command-item { padding: 8px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .command-item:hover, .command-item.selected { background: var(--menu-hover); color: #fff; }
+        .toast-container { position: fixed; bottom: 40px; right: 20px; z-index: 3000; display: flex; flex-direction: column; gap: 8px; }
+        .toast { background: var(--sidebar-bg); border: 1px solid var(--border); border-left: 3px solid var(--accent); padding: 10px 16px; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-size: 13px; animation: toastIn 0.3s ease; }
+        @keyframes toastIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--fg-dim); }
+        .resizer { width: 4px; cursor: col-resize; background: transparent; flex-shrink: 0; }
+        .resizer:hover { background: var(--accent); }
+        .preview-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 2500; display: none; align-items: center; justify-content: center; }
+        .preview-modal.active { display: flex; }
+        .preview-frame { width: 90vw; height: 90vh; background: #fff; border-radius: 8px; border: none; }
+        .preview-close { position: absolute; top: 20px; right: 20px; color: #fff; font-size: 24px; cursor: pointer; }
+        .quick-input-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); z-index: 2000; display: none; align-items: flex-start; justify-content: center; padding-top: 80px; }
+        .quick-input-overlay.active { display: flex; }
+        .quick-input-box { width: 600px; background: var(--menu-bg); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+        .quick-input { width: 100%; padding: 12px 16px; background: transparent; border: none; border-bottom: 1px solid var(--border); color: var(--fg); font-size: 16px; outline: none; }
+        .branch-dropdown { position: absolute; bottom: 24px; background: var(--menu-bg); border: 1px solid var(--border); border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); min-width: 150px; display: none; z-index: 1001; }
+        .branch-dropdown.active { display: block; }
+        .branch-item { padding: 8px 16px; cursor: pointer; font-size: 13px; }
+        .branch-item:hover { background: var(--menu-hover); color: #fff; }
+        .branch-item.active { color: var(--accent); }
+        .lang-dropdown { position: absolute; bottom: 24px; right: 0; background: var(--menu-bg); border: 1px solid var(--border); border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); min-width: 120px; display: none; z-index: 1001; }
+        .lang-dropdown.active { display: block; }
+        .hidden { display: none !important; }
+        .chat-wrap { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+        .chat-topbar { padding: 6px 12px; border-bottom: 1px solid var(--border); font-size: 11px; color: var(--fg-dim); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; min-height: 28px; }
+        .chat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+        .chat-msgs { flex: 1; overflow-y: auto; padding: 10px 12px; font-size: 13px; }
+        .chat-msg { margin-bottom: 10px; }
+        .chat-msg-hd { display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px; }
+        .chat-msg-name { font-weight: 600; font-size: 12px; }
+        .chat-msg-time { color: var(--fg-dim); font-size: 11px; }
+        .chat-msg-body { color: var(--fg); line-height: 1.5; word-break: break-word; }
+        .chat-footer { padding: 8px 12px; border-top: 1px solid var(--border); display: flex; gap: 6px; align-items: center; }
+        .chat-input { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--fg); padding: 6px 10px; border-radius: 4px; font-family: var(--font-ui); font-size: 13px; outline: none; }
+        .chat-input:focus { border-color: var(--accent); }
+        .chat-name-btn { background: transparent; border: none; color: var(--fg-dim); cursor: pointer; font-size: 16px; padding: 0 4px; }
+        .chat-name-btn:hover { color: var(--fg); }
+        .loading-screen { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 5000; gap: 20px; }
+        .loading-spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { color: var(--fg-dim); font-size: 14px; }
+        .settings-panel { padding: 16px; max-width: 600px; }
+        .settings-group { margin-bottom: 20px; }
+        .settings-label { font-size: 13px; font-weight: 600; margin-bottom: 8px; display: block; }
+        .settings-select { width: 100%; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); color: var(--fg); border-radius: 4px; font-size: 13px; }
+        .debug-panel { padding: 12px; }
+        .debug-config { padding: 8px; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 8px; cursor: pointer; }
+        .debug-config:hover { background: var(--hover); }
+        .debug-config.active { border-color: var(--accent); }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="menu-bar" id="menuBar">
+            <div class="menu-item" data-menu="file">File</div>
+            <div class="menu-item" data-menu="edit">Edit</div>
+            <div class="menu-item" data-menu="selection">Selection</div>
+            <div class="menu-item" data-menu="view">View</div>
+            <div class="menu-item" data-menu="go">Go</div>
+            <div class="menu-item" data-menu="run">Run</div>
+            <div class="menu-item" data-menu="terminal">Terminal</div>
+            <div class="menu-item" data-menu="help">Help</div>
+        </div>
+
+        <div class="workbench">
+            <div class="activity-bar" id="activityBar">
+                <div class="activity-icon active" data-view="explorer" title="Explorer">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 2H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V7l-5-5H9z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                        <path d="M9 2v5h5" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                        <path d="M13 5H8a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-9l-5-5H13z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="var(--activity-bar-bg)"/>
+                        <path d="M13 5v5h5" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <div class="activity-icon" data-view="search" title="Search">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div class="activity-icon" data-view="scm" title="Source Control">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="6" cy="5" r="2.5" stroke="currentColor" stroke-width="1.4"/>
+                        <circle cx="6" cy="19" r="2.5" stroke="currentColor" stroke-width="1.4"/>
+                        <circle cx="18" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4"/>
+                        <path d="M6 7.5v9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                        <path d="M6 7.5c0 3 3.5 4.5 6 4.5s6 1.5 6-2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div class="activity-icon" data-view="debug" title="Run and Debug">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M8 6.82v10.36a1 1 0 0 0 1.54.84l8.14-5.18a1 1 0 0 0 0-1.68L9.54 5.98A1 1 0 0 0 8 6.82z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                        <path d="M5 3L3 5M19 3l2 2M5 21l-2-2M19 21l2-2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                        <path d="M3 12h2M19 12h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div class="activity-icon" data-view="extensions" title="Extensions">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="3" y="3" width="8" height="8" rx="1" stroke="currentColor" stroke-width="1.4"/>
+                        <rect x="13" y="3" width="8" height="8" rx="1" stroke="currentColor" stroke-width="1.4"/>
+                        <rect x="3" y="13" width="8" height="8" rx="1" stroke="currentColor" stroke-width="1.4"/>
+                        <path d="M13 17h2v-2h2v2h2v2h-2v2h-2v-2h-2v-2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <div style="flex:1"></div>
+                <div class="activity-icon" data-view="ai" title="AI Agent">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.4"/>
+                        <path d="M8 7V5a4 4 0 0 1 8 0v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                        <circle cx="9" cy="13" r="1.5" fill="currentColor"/>
+                        <circle cx="15" cy="13" r="1.5" fill="currentColor"/>
+                        <path d="M9 17c1 1 5 1 6 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div class="activity-icon" data-view="settings" title="Settings">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.4"/>
+                        <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="sidebar" id="sidebar">
+                <div class="sidebar-header" id="sidebarHeader">Explorer</div>
+                <div class="sidebar-content" id="sidebarContent">
+                    <div class="sidebar-view" id="view-explorer">
+                        <div class="file-tree" id="fileTree"></div>
+                    </div>
+                    <div class="sidebar-view hidden" id="view-search">
+                        <div class="search-box">
+                            <input type="text" class="search-input" id="searchInput" placeholder="Search across files...">
+                            <input type="text" class="search-input" id="replaceInput" placeholder="Replace...">
+                            <div class="search-options">
+                                <span class="search-option" id="regexToggle">.* Regex</span>
+                                <span class="search-option" id="caseToggle">Aa Case</span>
+                                <span class="search-option" id="wholeToggle">|_| Whole</span>
+                            </div>
+                        </div>
+                        <div class="search-results" id="searchResults"></div>
+                    </div>
+                    <div class="sidebar-view hidden" id="view-scm">
+                        <div class="scm-section">
+                            <div class="scm-header">Changes <span id="changesCount">0</span></div>
+                            <div id="changesList"></div>
+                        </div>
+                        <div class="scm-section">
+                            <div class="scm-header">Staged <span id="stagedCount">0</span></div>
+                            <div id="stagedList"></div>
+                        </div>
+                        <div class="scm-commit-box">
+                            <textarea class="scm-commit-input" id="commitMessage" placeholder="Message (Ctrl+Enter to commit)"></textarea>
+                            <button class="btn btn-primary" id="commitBtn" style="width:100%">✓ Commit</button>
+                        </div>
+                        <div class="scm-section">
+                            <div class="scm-header">Branches</div>
+                            <div id="branchList"></div>
+                        </div>
+                        <div class="scm-section">
+                            <div class="scm-header">Recent Commits</div>
+                            <div id="commitLog"></div>
+                        </div>
+                    </div>
+                    <div class="sidebar-view hidden" id="view-debug">
+                        <div class="debug-panel">
+                            <div style="font-size:11px;font-weight:600;color:var(--fg-dim);margin-bottom:8px;text-transform:uppercase;">Run and Debug</div>
+                            <div id="debugConfigs"></div>
+                            <div style="margin-top:16px;font-size:11px;font-weight:600;color:var(--fg-dim);text-transform:uppercase;">Breakpoints</div>
+                            <div id="breakpointsList" style="margin-top:8px;color:var(--fg-dim);font-size:12px;">No breakpoints</div>
+                        </div>
+                    </div>
+                    <div class="sidebar-view hidden" id="view-extensions">
+                        <div class="extensions-list" id="extensionsList"></div>
+                    </div>
+                    <div class="sidebar-view hidden" id="view-ai">
+                        <div class="ai-panel">
+                            <div style="padding:12px;border-bottom:1px solid var(--border);font-weight:600;">🤖 AI Agent</div>
+                            <div class="ai-chat" id="aiChat"></div>
+                            <div class="ai-input-area">
+                                <input type="text" class="ai-input" id="aiInput" placeholder="Ask AI to explain, generate, fix bugs...">
+                                <button class="btn btn-primary" id="aiSend">Send</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="sidebar-view hidden" id="view-settings">
+                        <div class="settings-panel">
+                            <div class="settings-group">
+                                <label class="settings-label">Color Theme</label>
+                                <select class="settings-select" id="themeSelect">
+                                    <option value="vs-dark">Dark+ (default dark)</option>
+                                    <option value="vs">Light+</option>
+                                    <option value="hc-black">High Contrast</option>
+                                </select>
+                            </div>
+                            <div class="settings-group">
+                                <label class="settings-label">Font Size</label>
+                                <select class="settings-select" id="fontSizeSelect">
+                                    <option value="12">12px</option>
+                                    <option value="14" selected>14px</option>
+                                    <option value="16">16px</option>
+                                    <option value="18">18px</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="resizer" id="sidebarResizer"></div>
+
+            <div class="editor-area" id="editorArea">
+                <div class="tab-bar" id="tabBar"></div>
+                <div class="editor-container" id="editorContainer">
+                    <div class="empty-editor" id="emptyEditor">
+                        <div class="empty-editor-logo">VS</div>
+                        <div>Welcome to VS Code: Web</div>
+                        <div style="font-size:12px;color:var(--fg-dim);">Open a file from the Explorer to start editing</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel" id="panel">
+            <div class="panel-tabs">
+                <div class="panel-tab active" data-panel="terminal">Terminal</div>
+                <div class="panel-tab" data-panel="problems">Problems</div>
+                <div class="panel-tab" data-panel="output">Output</div>
+                <div class="panel-tab" data-panel="debug">Debug Console</div>
+            </div>
+            <div class="panel-content" id="panelContent">
+                <div class="panel-view" id="panel-terminal">
+                    <div class="terminal-container">
+                        <div class="terminal-tabs" id="terminalTabs"></div>
+                        <div class="terminal-output" id="terminalOutput"></div>
+                    </div>
+                </div>
+                <div class="panel-view hidden" id="panel-problems">
+                    <div id="problemsList"></div>
+                </div>
+                <div class="panel-view hidden" id="panel-output">
+                    <div style="margin-bottom:8px;">
+                        <select id="outputChannel" style="background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:4px 8px;border-radius:4px;font-size:12px;">
+                            <option value="vite">Vite</option>
+                            <option value="typescript">TypeScript</option>
+                            <option value="eslint">ESLint</option>
+                        </select>
+                    </div>
+                    <div id="outputContent"></div>
+                </div>
+                <div class="panel-view hidden" id="panel-debug">
+                    <div class="debug-eval">
+                        <input type="text" id="debugInput" placeholder="Evaluate expression (e.g., 1+1, [1,2,3].map(x=>x*2))...">
+                        <button class="btn btn-primary" onclick="app.evalDebug()">Eval</button>
+                    </div>
+                    <div id="debugResults"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-bar" id="statusBar">
+            <div class="status-left">
+                <span class="status-item" id="statusGit" title="Git Branch">main</span>
+                <span class="status-item" id="statusErrors" title="Problems">⚠ 2</span>
+                <span class="status-item" id="statusWarnings" title="Warnings">ⓘ 0</span>
+            </div>
+            <div class="status-right">
+                <span class="status-item" id="statusPrettier" title="Format">Prettier</span>
+                <span class="status-item" id="statusLang" title="Language">Plain Text</span>
+                <span class="status-item" id="statusEncoding" title="Encoding">UTF-8</span>
+                <span class="status-item" id="statusEol" title="Line Ending">LF</span>
+                <span class="status-item" id="statusCursor" title="Cursor">Ln 1, Col 1</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="command-palette-overlay" id="commandPalette">
+        <div class="command-palette">
+            <input type="text" class="command-palette-input" id="commandInput" placeholder="Type a command...">
+            <div class="command-palette-list" id="commandList"></div>
+        </div>
+    </div>
+
+    <div class="quick-input-overlay" id="quickInputOverlay">
+        <div class="quick-input-box">
+            <input type="text" class="quick-input" id="quickInput" placeholder="">
+            <div class="command-palette-list" id="quickInputList"></div>
+        </div>
+    </div>
+
+    <div class="preview-modal" id="previewModal">
+        <span class="preview-close" onclick="app.closePreview()">✕</span>
+        <iframe class="preview-frame" id="previewFrame"></iframe>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <div class="branch-dropdown" id="branchDropdown">
+        <div class="branch-item active" data-branch="main">main</div>
+        <div class="branch-item" data-branch="develop">develop</div>
+        <div class="branch-item" data-branch="feature/new-ui">feature/new-ui</div>
+    </div>
+
+    <div class="lang-dropdown" id="langDropdown">
+        <div class="lang-item" data-lang="plaintext">Plain Text</div>
+        <div class="lang-item" data-lang="javascript">JavaScript</div>
+        <div class="lang-item" data-lang="typescript">TypeScript</div>
+        <div class="lang-item" data-lang="python">Python</div>
+        <div class="lang-item" data-lang="go">Go</div>
+        <div class="lang-item" data-lang="rust">Rust</div>
+        <div class="lang-item" data-lang="html">HTML</div>
+        <div class="lang-item" data-lang="css">CSS</div>
+        <div class="lang-item" data-lang="json">JSON</div>
+        <div class="lang-item" data-lang="markdown">Markdown</div>
+    </div>
+
+    <script>
+
+        class VSCodeApp {
+            constructor() {
+                this.db = null;
+                this.monaco = null;
+                this.editors = new Map();
+                this.activeEditor = null;
+                this.tabs = [];
+                this.activeTab = null;
+                this.fileSystem = new Map();
+                this.currentBranch = 'main';
+                this.terminals = [];
+                this.activeTerminal = 0;
+                this.commandHistory = [];
+                this.historyIndex = -1;
+                this.extensions = [];
+                this.installedExtensions = new Set();
+                this.gitChanges = [];
+                this.gitStaged = [];
+                this.commits = [];
+                this.claudeMode = false;
+                this.claudeInterrupted = false;
+                this.settings = { theme: 'vs-dark', fontSize: 14 };
+                this.viewStates = {};
+                this.untitledCount = 0;
+                this.terminalCwd = '/';
+                this.outputLogs = { vite: [], typescript: [], eslint: [] };
+                this.debugConfigs = [];
+                this.problems = [];
+                this.langMap = {
+                    'js': 'javascript', 'jsx': 'javascript', 'ts': 'typescript', 'tsx': 'typescript',
+                    'py': 'python', 'go': 'go', 'rs': 'rust', 'java': 'java', 'cpp': 'cpp',
+                    'c': 'c', 'h': 'cpp', 'html': 'html', 'htm': 'html', 'css': 'css',
+                    'scss': 'scss', 'md': 'markdown', 'json': 'json', 'yaml': 'yaml',
+                    'yml': 'yaml', 'sql': 'sql', 'sh': 'shell', 'bash': 'shell',
+                    'dockerfile': 'dockerfile', 'xml': 'xml', 'svg': 'xml'
+                };
+                this.init();
+            }
+
+            async init() {
+                await this.initDB();
+                await this.loadState();
+                this.initFileSystem();
+                this.initExtensions();
+                this.initGit();
+                this.initDebug();
+                this.initProblems();
+                this.initOutput();
+                // Show UI immediately with fallback editors
+                this.fallbackMode = true;
+                this.restoreEditorsFallback();
+                this.initUI();
+                // Try to load Monaco in background and upgrade editors
+                this.initMonaco();
+            }
+
+            initDB() {
+                return new Promise((resolve, reject) => {
+                    const req = indexedDB.open('vscode_web_db', 2);
+                    req.onerror = () => reject(req.error);
+                    req.onsuccess = () => { this.db = req.result; resolve(); };
+                    req.onupgradeneeded = (e) => {
+                        const db = e.target.result;
+                        const keyPaths = { files: 'path', state: 'key', extensions: 'id', git: 'key', terminal: 'key' };
+                        Object.entries(keyPaths).forEach(([name, keyPath]) => {
+                            if (db.objectStoreNames.contains(name)) db.deleteObjectStore(name);
+                            db.createObjectStore(name, { keyPath });
+                        });
+                    };
+                });
+            }
+
+            async loadState() {
+                try {
+                    const state = await this.dbGet('state', 'main');
+                    if (state) {
+                        if (state.tabs) this.tabs = state.tabs;
+                        if (state.activeTab) this.activeTab = state.activeTab;
+                        if (state.installedExtensions) this.installedExtensions = new Set(state.installedExtensions);
+                        if (state.currentBranch) this.currentBranch = state.currentBranch;
+                        if (state.commandHistory) this.commandHistory = state.commandHistory;
+                        if (state.terminalCwd) this.terminalCwd = state.terminalCwd;
+                        if (state.settings) this.settings = { ...this.settings, ...state.settings };
+                        if (state.untitledCount) this.untitledCount = state.untitledCount;
+                        if (state.viewStates) this.viewStates = state.viewStates;
+                    }
+                    const files = await this.dbGetAll('files');
+                    files.forEach(f => this.fileSystem.set(f.path, f));
+                    const git = await this.dbGet('git', 'data');
+                    if (git) {
+                        this.commits = git.commits || [];
+                        this.gitChanges = git.changes || [];
+                    }
+                    const ext = await this.dbGetAll('extensions');
+                    ext.forEach(e => this.installedExtensions.add(e.id));
+                } catch (e) { console.log('No previous state'); }
+            }
+
+            async saveState() {
+                try {
+                    await this.dbPut('state', {
+                        key: 'main', tabs: this.tabs, activeTab: this.activeTab,
+                        installedExtensions: Array.from(this.installedExtensions),
+                        currentBranch: this.currentBranch, commandHistory: this.commandHistory,
+                        terminalCwd: this.terminalCwd, settings: this.settings,
+                        untitledCount: this.untitledCount, viewStates: this.viewStates
+                    });
+                } catch (e) {}
+            }
+
+            dbGet(store, key) {
+                return new Promise((resolve, reject) => {
+                    const tx = this.db.transaction(store, 'readonly');
+                    const req = tx.objectStore(store).get(key);
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                });
+            }
+
+            dbGetAll(store) {
+                return new Promise((resolve, reject) => {
+                    const tx = this.db.transaction(store, 'readonly');
+                    const req = tx.objectStore(store).getAll();
+                    req.onsuccess = () => resolve(req.result || []);
+                    req.onerror = () => reject(req.error);
+                });
+            }
+
+            dbPut(store, data) {
+                return new Promise((resolve, reject) => {
+                    const tx = this.db.transaction(store, 'readwrite');
+                    const req = tx.objectStore(store).put(data);
+                    req.onsuccess = () => resolve();
+                    req.onerror = () => reject(req.error);
+                });
+            }
+
+            dbDelete(store, key) {
+                return new Promise((resolve, reject) => {
+                    const tx = this.db.transaction(store, 'readwrite');
+                    const req = tx.objectStore(store).delete(key);
+                    req.onsuccess = () => resolve();
+                    req.onerror = () => reject(req.error);
+                });
+            }
+
+            initFileSystem() {
+                if (this.fileSystem.size === 0) {
+                    const defaultFiles = [
+                        { path: '/README.md', content: '# my-app\n\nA modern React application built with Vite and TypeScript.\n\n## Getting Started\n\n```bash\nnpm install\nnpm run dev\n```\n\n## Scripts\n\n- `npm run dev` — start development server\n- `npm run build` — build for production\n- `npm run preview` — preview production build\n- `npm run lint` — run ESLint\n', language: 'markdown' },
+                        { path: '/.gitignore', content: 'node_modules\ndist\ndist-ssr\n*.local\n.env\n.env.local\n.DS_Store\ncoverage\n', language: 'plaintext' },
+                        { path: '/index.html', content: '<!DOCTYPE html>\n<html lang="en">\n  <head>\n    <meta charset="UTF-8" />\n    <link rel="icon" type="image/svg+xml" href="/vite.svg" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n    <title>My App</title>\n  </head>\n  <body>\n    <div id="root"></div>\n    <script type="module" src="/src/main.tsx"><\/script>\n  </body>\n</html>', language: 'html' },
+                        { path: '/package.json', content: '{\n  "name": "my-app",\n  "version": "0.1.0",\n  "private": true,\n  "type": "module",\n  "scripts": {\n    "dev": "vite",\n    "build": "tsc && vite build",\n    "preview": "vite preview",\n    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives"\n  },\n  "dependencies": {\n    "react": "^18.2.0",\n    "react-dom": "^18.2.0",\n    "react-router-dom": "^6.18.0",\n    "zustand": "^4.4.6",\n    "axios": "^1.6.0"\n  },\n  "devDependencies": {\n    "@types/react": "^18.2.37",\n    "@types/react-dom": "^18.2.15",\n    "@typescript-eslint/eslint-plugin": "^6.10.0",\n    "@vitejs/plugin-react": "^4.1.1",\n    "typescript": "^5.2.2",\n    "vite": "^5.0.0"\n  }\n}', language: 'json' },
+                        { path: '/tsconfig.json', content: '{\n  "compilerOptions": {\n    "target": "ES2020",\n    "useDefineForClassFields": true,\n    "lib": ["ES2020", "DOM", "DOM.Iterable"],\n    "module": "ESNext",\n    "skipLibCheck": true,\n    "moduleResolution": "bundler",\n    "allowImportingTsExtensions": true,\n    "resolveJsonModule": true,\n    "isolatedModules": true,\n    "noEmit": true,\n    "jsx": "react-jsx",\n    "strict": true,\n    "noUnusedLocals": true,\n    "noUnusedParameters": true\n  },\n  "include": ["src"]\n}', language: 'json' },
+                        { path: '/vite.config.ts', content: "import { defineConfig } from 'vite';\nimport react from '@vitejs/plugin-react';\nimport path from 'path';\n\nexport default defineConfig({\n  plugins: [react()],\n  resolve: {\n    alias: { '@': path.resolve(__dirname, './src') },\n  },\n  server: {\n    port: 3000,\n    open: true,\n  },\n});", language: 'typescript' },
+                        { path: '/Dockerfile', content: 'FROM node:20-alpine AS builder\nWORKDIR /app\nCOPY package*.json .\nRUN npm ci\nCOPY . .\nRUN npm run build\n\nFROM nginx:alpine\nCOPY --from=builder /app/dist /usr/share/nginx/html\nEXPOSE 80\nCMD ["nginx", "-g", "daemon off;"]', language: 'dockerfile' },
+                        { path: '/.eslintrc.cjs', content: "module.exports = {\n  root: true,\n  env: { browser: true, es2020: true },\n  extends: [\n    'eslint:recommended',\n    'plugin:@typescript-eslint/recommended',\n    'plugin:react-hooks/recommended',\n  ],\n  ignorePatterns: ['dist'],\n  parser: '@typescript-eslint/parser',\n  plugins: ['react-refresh'],\n  rules: {\n    'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],\n  },\n};", language: 'javascript' },
+                        // src
+                        { path: '/src/main.tsx', content: "import React from 'react';\nimport ReactDOM from 'react-dom/client';\nimport { BrowserRouter } from 'react-router-dom';\nimport App from './App';\nimport './styles/global.css';\n\nReactDOM.createRoot(document.getElementById('root')!).render(\n  <React.StrictMode>\n    <BrowserRouter>\n      <App />\n    </BrowserRouter>\n  </React.StrictMode>,\n);", language: 'typescript' },
+                        { path: '/src/App.tsx', content: "import { Routes, Route } from 'react-router-dom';\nimport { Layout } from './components/Layout';\nimport { Home } from './pages/Home';\nimport { Dashboard } from './pages/Dashboard';\nimport { NotFound } from './pages/NotFound';\n\nexport default function App() {\n  return (\n    <Layout>\n      <Routes>\n        <Route path=\"/\" element={<Home />} />\n        <Route path=\"/dashboard\" element={<Dashboard />} />\n        <Route path=\"*\" element={<NotFound />} />\n      </Routes>\n    </Layout>\n  );\n}", language: 'typescript' },
+                        // src/components
+                        { path: '/src/components/Layout.tsx', content: "import { ReactNode } from 'react';\nimport { Header } from './Header';\nimport { Sidebar } from './Sidebar';\nimport styles from './Layout.module.css';\n\ninterface LayoutProps { children: ReactNode; }\n\nexport function Layout({ children }: LayoutProps) {\n  return (\n    <div className={styles.root}>\n      <Header />\n      <div className={styles.body}>\n        <Sidebar />\n        <main className={styles.main}>{children}</main>\n      </div>\n    </div>\n  );\n}", language: 'typescript' },
+                        { path: '/src/components/Header.tsx', content: "import { Link } from 'react-router-dom';\nimport { useAuthStore } from '../store/authStore';\nimport styles from './Header.module.css';\n\nexport function Header() {\n  const { user, logout } = useAuthStore();\n\n  return (\n    <header className={styles.header}>\n      <Link to=\"/\" className={styles.logo}>MyApp</Link>\n      <nav className={styles.nav}>\n        <Link to=\"/dashboard\">Dashboard</Link>\n        {user ? (\n          <button onClick={logout}>Logout</button>\n        ) : (\n          <Link to=\"/login\">Login</Link>\n        )}\n      </nav>\n    </header>\n  );\n}", language: 'typescript' },
+                        { path: '/src/components/Sidebar.tsx', content: "import { NavLink } from 'react-router-dom';\nimport styles from './Sidebar.module.css';\n\nconst navItems = [\n  { to: '/', label: 'Home', icon: '🏠' },\n  { to: '/dashboard', label: 'Dashboard', icon: '📊' },\n  { to: '/settings', label: 'Settings', icon: '⚙️' },\n];\n\nexport function Sidebar() {\n  return (\n    <aside className={styles.sidebar}>\n      <nav>\n        {navItems.map(item => (\n          <NavLink key={item.to} to={item.to} className={({ isActive }) => isActive ? styles.active : ''}>\n            <span>{item.icon}</span>\n            <span>{item.label}</span>\n          </NavLink>\n        ))}\n      </nav>\n    </aside>\n  );\n}", language: 'typescript' },
+                        { path: '/src/components/Button.tsx', content: "import { ButtonHTMLAttributes, ReactNode } from 'react';\nimport styles from './Button.module.css';\n\ninterface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {\n  variant?: 'primary' | 'secondary' | 'danger';\n  size?: 'sm' | 'md' | 'lg';\n  loading?: boolean;\n  children: ReactNode;\n}\n\nexport function Button({ variant = 'primary', size = 'md', loading, children, disabled, ...rest }: ButtonProps) {\n  return (\n    <button\n      className={[styles.btn, styles[variant], styles[size]].join(' ')}\n      disabled={disabled || loading}\n      {...rest}\n    >\n      {loading ? <span className={styles.spinner} /> : children}\n    </button>\n  );\n}", language: 'typescript' },
+                        { path: '/src/components/Modal.tsx', content: "import { ReactNode, useEffect } from 'react';\nimport { createPortal } from 'react-dom';\nimport styles from './Modal.module.css';\n\ninterface ModalProps {\n  open: boolean;\n  title?: string;\n  onClose: () => void;\n  children: ReactNode;\n}\n\nexport function Modal({ open, title, onClose, children }: ModalProps) {\n  useEffect(() => {\n    if (!open) return;\n    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };\n    document.addEventListener('keydown', handler);\n    return () => document.removeEventListener('keydown', handler);\n  }, [open, onClose]);\n\n  if (!open) return null;\n\n  return createPortal(\n    <div className={styles.overlay} onClick={onClose}>\n      <div className={styles.dialog} onClick={e => e.stopPropagation()}>\n        {title && <div className={styles.header}><h2>{title}</h2><button onClick={onClose}>✕</button></div>}\n        <div className={styles.body}>{children}</div>\n      </div>\n    </div>,\n    document.body\n  );\n}", language: 'typescript' },
+                        { path: '/src/components/Table.tsx', content: "interface Column<T> {\n  key: keyof T;\n  header: string;\n  render?: (value: T[keyof T], row: T) => React.ReactNode;\n}\n\ninterface TableProps<T> {\n  data: T[];\n  columns: Column<T>[];\n  onRowClick?: (row: T) => void;\n}\n\nexport function Table<T extends { id: string | number }>({ data, columns, onRowClick }: TableProps<T>) {\n  return (\n    <table style={{ width: '100%', borderCollapse: 'collapse' }}>\n      <thead>\n        <tr>{columns.map(col => <th key={String(col.key)}>{col.header}</th>)}</tr>\n      </thead>\n      <tbody>\n        {data.map(row => (\n          <tr key={row.id} onClick={() => onRowClick?.(row)} style={{ cursor: onRowClick ? 'pointer' : 'default' }}>\n            {columns.map(col => (\n              <td key={String(col.key)}>{col.render ? col.render(row[col.key], row) : String(row[col.key])}</td>\n            ))}\n          </tr>\n        ))}\n      </tbody>\n    </table>\n  );\n}", language: 'typescript' },
+                        // src/hooks
+                        { path: '/src/hooks/useLocalStorage.ts', content: "import { useState, useEffect } from 'react';\n\nexport function useLocalStorage<T>(key: string, initialValue: T) {\n  const [storedValue, setStoredValue] = useState<T>(() => {\n    try {\n      const item = window.localStorage.getItem(key);\n      return item ? JSON.parse(item) : initialValue;\n    } catch {\n      return initialValue;\n    }\n  });\n\n  const setValue = (value: T | ((val: T) => T)) => {\n    try {\n      const valueToStore = value instanceof Function ? value(storedValue) : value;\n      setStoredValue(valueToStore);\n      window.localStorage.setItem(key, JSON.stringify(valueToStore));\n    } catch (error) {\n      console.error(error);\n    }\n  };\n\n  return [storedValue, setValue] as const;\n}", language: 'typescript' },
+                        { path: '/src/hooks/useDebounce.ts', content: "import { useState, useEffect } from 'react';\n\nexport function useDebounce<T>(value: T, delay: number): T {\n  const [debouncedValue, setDebouncedValue] = useState<T>(value);\n\n  useEffect(() => {\n    const handler = setTimeout(() => setDebouncedValue(value), delay);\n    return () => clearTimeout(handler);\n  }, [value, delay]);\n\n  return debouncedValue;\n}", language: 'typescript' },
+                        { path: '/src/hooks/useFetch.ts', content: "import { useState, useEffect } from 'react';\n\ninterface FetchState<T> {\n  data: T | null;\n  loading: boolean;\n  error: string | null;\n}\n\nexport function useFetch<T>(url: string): FetchState<T> {\n  const [state, setState] = useState<FetchState<T>>({ data: null, loading: true, error: null });\n\n  useEffect(() => {\n    let cancelled = false;\n    setState({ data: null, loading: true, error: null });\n    fetch(url)\n      .then(r => r.json())\n      .then(data => { if (!cancelled) setState({ data, loading: false, error: null }); })\n      .catch(err => { if (!cancelled) setState({ data: null, loading: false, error: err.message }); });\n    return () => { cancelled = true; };\n  }, [url]);\n\n  return state;\n}", language: 'typescript' },
+                        // src/store
+                        { path: '/src/store/authStore.ts', content: "import { create } from 'zustand';\nimport { persist } from 'zustand/middleware';\nimport { api } from '../api/client';\n\ninterface User { id: string; name: string; email: string; role: 'admin' | 'user'; }\n\ninterface AuthState {\n  user: User | null;\n  token: string | null;\n  login: (email: string, password: string) => Promise<void>;\n  logout: () => void;\n}\n\nexport const useAuthStore = create<AuthState>()(\n  persist(\n    (set) => ({\n      user: null,\n      token: null,\n      login: async (email, password) => {\n        const { user, token } = await api.post('/auth/login', { email, password });\n        set({ user, token });\n      },\n      logout: () => set({ user: null, token: null }),\n    }),\n    { name: 'auth-storage' }\n  )\n);", language: 'typescript' },
+                        { path: '/src/store/uiStore.ts', content: "import { create } from 'zustand';\n\ntype Theme = 'light' | 'dark' | 'system';\n\ninterface UIState {\n  theme: Theme;\n  sidebarOpen: boolean;\n  setTheme: (theme: Theme) => void;\n  toggleSidebar: () => void;\n}\n\nexport const useUIStore = create<UIState>((set) => ({\n  theme: 'dark',\n  sidebarOpen: true,\n  setTheme: (theme) => set({ theme }),\n  toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),\n}));", language: 'typescript' },
+                        // src/api
+                        { path: '/src/api/client.ts', content: "import axios from 'axios';\n\nconst BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080/api';\n\nexport const api = axios.create({\n  baseURL: BASE_URL,\n  timeout: 10000,\n  headers: { 'Content-Type': 'application/json' },\n});\n\napi.interceptors.request.use((config) => {\n  const token = localStorage.getItem('auth-token');\n  if (token) config.headers.Authorization = `Bearer ${token}`;\n  return config;\n});\n\napi.interceptors.response.use(\n  (res) => res.data,\n  (err) => {\n    if (err.response?.status === 401) window.location.href = '/login';\n    return Promise.reject(err);\n  }\n);", language: 'typescript' },
+                        { path: '/src/api/users.ts', content: "import { api } from './client';\n\nexport interface User { id: string; name: string; email: string; createdAt: string; }\n\nexport const usersApi = {\n  getAll: () => api.get<User[]>('/users'),\n  getById: (id: string) => api.get<User>(`/users/${id}`),\n  create: (data: Omit<User, 'id' | 'createdAt'>) => api.post<User>('/users', data),\n  update: (id: string, data: Partial<User>) => api.put<User>(`/users/${id}`, data),\n  delete: (id: string) => api.delete(`/users/${id}`),\n};", language: 'typescript' },
+                        // src/pages
+                        { path: '/src/pages/Home.tsx', content: "import { Link } from 'react-router-dom';\nimport { Button } from '../components/Button';\n\nexport function Home() {\n  return (\n    <div style={{ padding: 40, textAlign: 'center' }}>\n      <h1>Welcome to MyApp</h1>\n      <p style={{ color: '#888', marginBottom: 24 }}>Build something amazing.</p>\n      <Link to=\"/dashboard\">\n        <Button>Go to Dashboard</Button>\n      </Link>\n    </div>\n  );\n}", language: 'typescript' },
+                        { path: '/src/pages/Dashboard.tsx', content: "import { useState } from 'react';\nimport { useFetch } from '../hooks/useFetch';\nimport { Table } from '../components/Table';\n\ninterface Post { id: number; title: string; body: string; userId: number; }\n\nexport function Dashboard() {\n  const [page, setPage] = useState(1);\n  const { data, loading, error } = useFetch<Post[]>(`/api/posts?page=${page}`);\n\n  if (loading) return <div>Loading...</div>;\n  if (error) return <div>Error: {error}</div>;\n\n  return (\n    <div style={{ padding: 24 }}>\n      <h2>Dashboard</h2>\n      <Table\n        data={data ?? []}\n        columns={[\n          { key: 'id', header: 'ID' },\n          { key: 'title', header: 'Title' },\n          { key: 'userId', header: 'User' },\n        ]}\n      />\n    </div>\n  );\n}", language: 'typescript' },
+                        { path: '/src/pages/NotFound.tsx', content: "import { Link } from 'react-router-dom';\n\nexport function NotFound() {\n  return (\n    <div style={{ padding: 40, textAlign: 'center' }}>\n      <h1 style={{ fontSize: 96, margin: 0 }}>404</h1>\n      <p>Page not found.</p>\n      <Link to=\"/\">Go home</Link>\n    </div>\n  );\n}", language: 'typescript' },
+                        // src/styles
+                        { path: '/src/styles/global.css', content: "*, *::before, *::after { box-sizing: border-box; }\n\nhtml, body { margin: 0; padding: 0; height: 100%; }\n\nbody {\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 14px;\n  line-height: 1.6;\n  background: #0d1117;\n  color: #c9d1d9;\n}\n\na { color: #58a6ff; text-decoration: none; }\na:hover { text-decoration: underline; }\n\n#root { height: 100%; }", language: 'css' },
+                        { path: '/src/styles/variables.css', content: ":root {\n  --color-bg: #0d1117;\n  --color-surface: #161b22;\n  --color-border: #30363d;\n  --color-primary: #58a6ff;\n  --color-text: #c9d1d9;\n  --color-text-muted: #8b949e;\n  --color-success: #3fb950;\n  --color-danger: #f85149;\n  --color-warning: #d29922;\n\n  --radius-sm: 4px;\n  --radius-md: 8px;\n  --radius-lg: 12px;\n\n  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);\n  --shadow-md: 0 4px 12px rgba(0,0,0,0.4);\n\n  --font-mono: 'Cascadia Code', 'Fira Code', Consolas, monospace;\n}", language: 'css' },
+                        // src/utils
+                        { path: '/src/utils/helpers.ts', content: "export const formatDate = (date: string | Date): string =>\n  new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' }).format(new Date(date));\n\nexport const formatBytes = (bytes: number): string => {\n  if (bytes === 0) return '0 B';\n  const k = 1024, sizes = ['B', 'KB', 'MB', 'GB'];\n  const i = Math.floor(Math.log(bytes) / Math.log(k));\n  return `${parseFloat((bytes / k ** i).toFixed(1))} ${sizes[i]}`;\n};\n\nexport const clsx = (...classes: (string | false | undefined | null)[]): string =>\n  classes.filter(Boolean).join(' ');\n\nexport const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));", language: 'typescript' },
+                        { path: '/src/utils/validators.ts', content: "export const isEmail = (v: string) => /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(v);\n\nexport const isStrongPassword = (v: string) =>\n  v.length >= 8 && /[A-Z]/.test(v) && /[a-z]/.test(v) && /[0-9]/.test(v);\n\nexport const isURL = (v: string) => {\n  try { new URL(v); return true; } catch { return false; }\n};\n\nexport function validateForm<T extends Record<string, string>>(values: T, rules: Partial<Record<keyof T, (v: string) => string | null>>) {\n  const errors: Partial<Record<keyof T, string>> = {};\n  for (const key in rules) {\n    const error = rules[key]?.(values[key] ?? '');\n    if (error) errors[key] = error;\n  }\n  return errors;\n}", language: 'typescript' },
+                        // src/types
+                        { path: '/src/types/index.ts', content: "export interface ApiResponse<T> {\n  data: T;\n  message: string;\n  status: 'success' | 'error';\n}\n\nexport interface PaginatedResponse<T> {\n  data: T[];\n  total: number;\n  page: number;\n  pageSize: number;\n}\n\nexport interface SelectOption {\n  value: string | number;\n  label: string;\n  disabled?: boolean;\n}\n\nexport type ID = string | number;\nexport type Nullable<T> = T | null;\nexport type Optional<T> = T | undefined;", language: 'typescript' },
+                        // .github
+                        { path: '/.github/workflows/ci.yml', content: 'name: CI\n\non:\n  push:\n    branches: [main, develop]\n  pull_request:\n    branches: [main]\n\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: "20"\n          cache: "npm"\n      - run: npm ci\n      - run: npm run lint\n      - run: npm run build\n\n  deploy:\n    needs: build\n    runs-on: ubuntu-latest\n    if: github.ref == \'refs/heads/main\'\n    steps:\n      - uses: actions/checkout@v4\n      - run: echo "Deploy to production"', language: 'yaml' },
+                        { path: '/.github/PULL_REQUEST_TEMPLATE.md', content: '## Summary\n\n<!-- Describe your changes -->\n\n## Type of change\n\n- [ ] Bug fix\n- [ ] New feature\n- [ ] Breaking change\n- [ ] Documentation update\n\n## Test plan\n\n- [ ] Unit tests\n- [ ] Manual testing\n\n## Screenshots\n\n<!-- Add screenshots if applicable -->', language: 'markdown' },
+                    ];
+                    defaultFiles.forEach(f => {
+                        this.fileSystem.set(f.path, f);
+                        this.dbPut('files', f);
+                    });
+                }
+            }
+
+            initExtensions() {
+                this.extensions = [
+                    { id: 'prettier', name: 'Prettier - Code: formatter', desc: 'Code: formatter using prettier', icon: '\u{1F3A8}', installed: false, category: 'Formatter', downloads: '45M' },
+                    { id: 'eslint', name: 'ESLint', desc: 'Integrates ESLint JavaScript', icon: '\u{1F50D}', installed: false, category: 'Linter', downloads: '32M' },
+                    { id: 'gitlens', name: 'GitLens', desc: 'Supercharge Git within VS Code:', icon: '\u{1F52D}', installed: false, category: 'SCM', downloads: '28M' },
+                    { id: 'live-server', name: 'Live Server', desc: 'Launch a development local server', icon: '\u{1F310}', installed: false, category: 'Debug', downloads: '35M' },
+                    { id: 'rest-client', name: 'REST Client', desc: 'REST Client for Visual Studio Code:', icon: '\u{1F310}', installed: false, category: 'Debug', downloads: '15M' },
+                    { id: 'vscode-icons', name: 'vscode-icons', desc: 'Icons for Visual Studio Code:', icon: '\u{1F4E6}', installed: false, category: 'Theme', downloads: '40M' },
+                    { id: 'material-icon', name: 'Material Icon Theme', desc: 'Material Design Icons', icon: '\u{1F3A8}', installed: false, category: 'Theme', downloads: '38M' },
+                    { id: 'python', name: 'Python', desc: 'Python language support', icon: '\u{1F40D}', installed: false, category: 'Language', downloads: '90M' },
+                    { id: 'docker', name: 'Docker', desc: 'Docker support', icon: '\u{1F433}', installed: false, category: 'DevOps', downloads: '25M' },
+                    { id: 'remote-ssh', name: 'Remote - SSH', desc: 'Open remote folders via SSH', icon: '\u{1F50C}', installed: false, category: 'Remote', downloads: '20M' },
+                    { id: 'copilot', name: 'GitHub Copilot', desc: 'AI pair programmer', icon: '\u{1F916}', installed: false, category: 'AI', downloads: '10M' },
+                    { id: 'markdown-all', name: 'Markdown All in One', desc: 'Markdown support', icon: '\u{1F4DD}', installed: false, category: 'Language', downloads: '18M' },
+                    { id: 'tailwind', name: 'Tailwind CSS IntelliSense', desc: 'Tailwind CSS support', icon: '\u{1F4A8}', installed: false, category: 'CSS', downloads: '12M' },
+                    { id: 'rust-analyzer', name: 'rust-analyzer', desc: 'Rust language support', icon: '\u{1F980}', installed: false, category: 'Language', downloads: '5M' },
+                    { id: 'go', name: 'Go', desc: 'Go language support', icon: '\u{1F535}', installed: false, category: 'Language', downloads: '15M' },
+                    { id: 'clangd', name: 'clangd', desc: 'C/C++ language support', icon: '\u{26A1}', installed: false, category: 'Language', downloads: '8M' },
+                    { id: 'java-ext', name: 'Extension Pack for Java', desc: 'Java development', icon: '\u{2615}', installed: false, category: 'Language', downloads: '22M' },
+                    { id: 'sqltools', name: 'SQLTools', desc: 'Database management', icon: '\u{1F5C4}', installed: false, category: 'Database', downloads: '6M' },
+                    { id: 'jest', name: 'Jest', desc: 'Jest testing support', icon: '\u{1F0CF}', installed: false, category: 'Testing', downloads: '7M' },
+                    { id: 'vitest', name: 'Vitest', desc: 'Vitest testing support', icon: '\u{26A1}', installed: false, category: 'Testing', downloads: '3M' },
+                    { id: 'playwright', name: 'Playwright Test', desc: 'Playwright testing', icon: '\u{1F3AD}', installed: false, category: 'Testing', downloads: '4M' },
+                    { id: 'git-graph', name: 'Git Graph', desc: 'View Git graph', icon: '\u{1F4CA}', installed: false, category: 'SCM', downloads: '9M' },
+                    { id: 'todo-tree', name: 'Todo Tree', desc: 'Show TODO comments', icon: '\u{1F333}', installed: false, category: 'Productivity', downloads: '11M' },
+                    { id: 'path-intellisense', name: 'Path Intellisense', desc: 'Autocomplete filenames', icon: '\u{1F4C1}', installed: false, category: 'Productivity', downloads: '16M' },
+                    { id: 'auto-rename', name: 'Auto Rename Tag', desc: 'Auto rename paired tags', icon: '\u{1F3F7}', installed: false, category: 'Productivity', downloads: '14M' },
+                    { id: 'bracket-pair', name: 'Bracket Pair Colorizer', desc: 'Colorize matching brackets', icon: '\u{1F308}', installed: false, category: 'Productivity', downloads: '19M' },
+                    { id: 'indent-rainbow', name: 'indent-rainbow', desc: 'Colorize indentation', icon: '\u{1F308}', installed: false, category: 'Productivity', downloads: '13M' },
+                    { id: 'better-comments', name: 'Better Comments', desc: 'Improve code comments', icon: '\u{1F4AC}', installed: false, category: 'Productivity', downloads: '17M' },
+                    { id: 'code-spell', name: 'Code: Spell Checker', desc: 'Spell check code', icon: '\u{1F524}', installed: false, category: 'Productivity', downloads: '10M' },
+                    { id: 'error-lens', name: 'Error Lens', desc: 'Show errors inline', icon: '\u{274C}', installed: false, category: 'Linter', downloads: '8M' }
+                ];
+                this.extensions.forEach(ext => {
+                    if (this.installedExtensions.has(ext.id)) ext.installed = true;
+                });
+            }
+
+            initGit() {
+                if (this.commits.length === 0) {
+                    this.commits = [
+                        { hash: 'a1b2c3d', message: 'Initial commit', author: 'You', date: '2 days ago', branch: 'main' },
+                        { hash: 'e4f5g6h', message: 'Add React components', author: 'You', date: '1 day ago', branch: 'main' },
+                        { hash: 'i7j8k9l', message: 'Setup TypeScript config', author: 'You', date: '5 hours ago', branch: 'main' }
+                    ];
+                }
+                this.gitChanges = [
+                    { path: 'src/App.tsx', status: 'modified' },
+                    { path: 'package.json', status: 'modified' }
+                ];
+            }
+
+            initDebug() {
+                this.debugConfigs = [
+                    { name: 'Launch Chrome', type: 'chrome', request: 'launch', url: 'http://localhost:3000' },
+                    { name: 'Attach to Node', type: 'node', request: 'attach', port: 9229 },
+                    { name: 'Run npm dev', type: 'node', request: 'launch', runtimeExecutable: 'npm', runtimeArgs: ['run', 'dev'] }
+                ];
+            }
+
+            initProblems() {
+                this.problems = [
+                    { severity: 'warning', file: 'src/App.tsx', line: 5, col: 10, message: "'count' is assigned a value but never used" },
+                    { severity: 'warning', file: 'src/utils/helpers.ts', line: 8, col: 15, message: 'Unexpected any. Specify a different type.' }
+                ];
+            }
+
+            initOutput() {
+                this.outputLogs = {
+                    vite: [
+                        '[vite] connected.',
+                        '[vite] page reload src/App.tsx',
+                        '[vite] hmr update /src/App.tsx',
+                        '2:34:12 PM [vite] optimized dependencies changed. reloading',
+                        '2:34:15 PM [vite] new dependencies optimized: react, react-dom'
+                    ],
+                    typescript: [
+                        '[ts] Starting compilation in watch mode...',
+                        '[ts] Found 0 errors. Watching for file changes.',
+                        '[ts] File change detected. Starting incremental compilation...',
+                        '[ts] Found 0 errors. Watching for file changes.'
+                    ],
+                    eslint: [
+                        '✖ 2 problems (0 errors, 2 warnings)',
+                        '  0 errors and 2 warnings potentially fixable with the `--fix` option.',
+                        '',
+                        'src/App.tsx',
+                        "  5:10  warning  'count' is assigned a value but never used  @typescript-eslint/no-unused-vars",
+                        'src/utils/helpers.ts',
+                        '  8:15  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any'
+                    ]
+                };
+            }
+
+            initMonaco() {
+                // UI is already showing; try to load Monaco in background and upgrade editors
+                const timeoutId = setTimeout(() => { /* give up silently */ }, 10000);
+
+                const waitForLoader = (retries) => {
+                    if (window.__monacoLoaderFailed || retries <= 0) { clearTimeout(timeoutId); return; }
+                    if (typeof window.require !== 'undefined') { this._startMonaco(timeoutId); return; }
+                    setTimeout(() => waitForLoader(retries - 1), 200);
+                };
+                waitForLoader(25);
+            }
+
+            _startMonaco(timeoutId) {
+                try {
+                    window.require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' } });
+                    window.require(['vs/editor/editor.main'], () => {
+                        clearTimeout(timeoutId);
+                        this.monaco = window.monaco;
+                        if (!this.monaco) return;
+                        this.fallbackMode = false;
+                        this.monaco.editor.setTheme(this.settings.theme);
+                        this.upgradeFallbackEditors();
+                    }, (err) => { clearTimeout(timeoutId); console.error('Monaco load error:', err); });
+                } catch (e) { clearTimeout(timeoutId); }
+            }
+
+            upgradeFallbackEditors() {
+                this.tabs.forEach(tab => {
+                    const old = this.editors.get(tab.id);
+                    const content = old ? old.getValue() : '';
+                    if (old) old.dispose();
+                    this.editors.delete(tab.id);
+                    this.createEditor(tab);
+                    const neo = this.editors.get(tab.id);
+                    if (neo && content) neo.setValue(content);
+                });
+                if (this.activeTab) this.activateTab(this.activeTab);
+            }
+
+            initFallbackEditor() {
+                this.monaco = null;
+                this.fallbackMode = true;
+                this.restoreEditorsFallback();
+                this.initUI();
+            }
+
+            createEditorFallback(tab) {
+                const container = document.createElement('div');
+                container.className = 'editor-instance';
+                container.id = 'editor-' + tab.id;
+                container.style.display = 'flex';
+                container.style.flexDirection = 'column';
+
+                const file = this.fileSystem.get(tab.path);
+                const textarea = document.createElement('textarea');
+                textarea.style.flex = '1';
+                textarea.style.background = 'var(--bg)';
+                textarea.style.color = 'var(--fg)';
+                textarea.style.border = 'none';
+                textarea.style.outline = 'none';
+                textarea.style.padding = '12px';
+                textarea.style.fontFamily = 'var(--font-mono)';
+                textarea.style.fontSize = this.settings.fontSize + 'px';
+                textarea.style.lineHeight = '1.6';
+                textarea.style.resize = 'none';
+                textarea.value = file ? file.content : '';
+                textarea.spellcheck = false;
+
+                textarea.addEventListener('input', () => {
+                    this.markDirty(tab.id, true);
+                    const f = this.fileSystem.get(tab.path);
+                    if (f) {
+                        f.content = textarea.value;
+                        this.dbPut('files', f);
+                    }
+                });
+
+                container.appendChild(textarea);
+                document.getElementById('editorContainer').appendChild(container);
+
+                // Mock editor API
+                const mockEditor = {
+                    getValue: () => textarea.value,
+                    setValue: (v) => { textarea.value = v; },
+                    getModel: () => ({ getValue: () => textarea.value, setValue: (v) => { textarea.value = v; }, getFullModelRange: () => ({ startLineNumber: 1, startColumn: 1, endLineNumber: textarea.value.split("\n").length, endColumn: textarea.value.split("\n").pop().length + 1 }) }),
+                    getPosition: () => ({ lineNumber: 1, column: 1 }),
+                    setPosition: () => {},
+                    revealLineInCenter: () => {},
+                    setSelection: () => {},
+                    onDidChangeCursorPosition: () => ({ dispose: () => {} }),
+                    onDidChangeModelContent: (cb) => { textarea.addEventListener('input', cb); return { dispose: () => {} }; },
+                    trigger: () => {},
+                    getAction: (name) => ({ run: () => this.showToast('Action "' + name + '" not available in fallback mode') }),
+                    updateOptions: (opts) => { if (opts.fontSize) textarea.style.fontSize = opts.fontSize + 'px'; },
+                    dispose: () => container.remove()
+                };
+
+                this.editors.set(tab.id, mockEditor);
+                return mockEditor;
+            }
+
+            restoreEditorsFallback() {
+                if (this.tabs.length > 0 && this.activeTab) {
+                    this.tabs.forEach(tab => this.createEditorFallback(tab));
+                    this.activateTab(this.activeTab);
+                }
+            }
+
+            restoreEditors() {
+                if (this.fallbackMode) return this.restoreEditorsFallback();
+                if (this.tabs.length > 0 && this.activeTab) {
+                    this.tabs.forEach(tab => this.createEditor(tab));
+                    this.activateTab(this.activeTab);
+                }
+            }
+
+            createEditor(tab) {
+                const container = document.createElement('div');
+                container.className = 'editor-instance';
+                container.id = 'editor-' + tab.id;
+                document.getElementById('editorContainer').appendChild(container);
+
+                const file = this.fileSystem.get(tab.path);
+                const lang = file ? (file.language || this.getLangFromPath(tab.path)) : 'plaintext';
+
+                const editor = this.monaco.editor.create(container, {
+                    value: file ? file.content : '',
+                    language: lang,
+                    theme: this.settings.theme,
+                    fontSize: this.settings.fontSize,
+                    automaticLayout: true,
+                    minimap: { enabled: true },
+                    scrollBeyondLastLine: false,
+                    renderLineHighlight: 'all',
+                    fontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
+                    fontLigatures: true,
+                    tabSize: 2,
+                    insertSpaces: true,
+                    wordWrap: 'on',
+                    bracketPairColorization: { enabled: true },
+                    guides: { bracketPairs: true },
+                    formatOnPaste: true,
+                    formatOnType: true,
+                    autoIndent: 'full',
+                    matchBrackets: 'always',
+                    quickSuggestions: true,
+                    suggestOnTriggerCharacters: true,
+                    acceptSuggestionOnEnter: 'on',
+                    readOnly: false
+                });
+
+                editor.onDidChangeModelContent(() => {
+                    this.markDirty(tab.id, true);
+                    const model = editor.getModel();
+                    if (model) {
+                        const content = model.getValue();
+                        const f = this.fileSystem.get(tab.path);
+                        if (f) {
+                            f.content = content;
+                            this.dbPut('files', f);
+                        }
+                    }
+                });
+
+                this.editors.set(tab.id, editor);
+                return editor;
+            }
+
+            getLangFromPath(path) {
+                const ext = path.split('.').pop()?.toLowerCase();
+                return this.langMap[ext] || 'plaintext';
+            }
+
+            renderFileTree() {
+                const tree = document.getElementById('fileTree');
+                tree.innerHTML = '';
+
+                const dirs = new Set();
+                const files = [];
+
+                this.fileSystem.forEach((file, path) => {
+                    const parts = path.split('/').filter(Boolean);
+                    let currentPath = '';
+                    parts.forEach((part, i) => {
+                        currentPath += '/' + part;
+                        if (i < parts.length - 1) dirs.add(currentPath);
+                    });
+                    if (parts.length > 0) files.push({ path, name: parts[parts.length - 1], parts });
+                });
+
+                const buildTree = (parentPath) => {
+                    const children = [];
+                    const seenDirs = new Set();
+                    const prefix = parentPath === '' ? '/' : parentPath + '/';
+
+                    files.forEach(f => {
+                        if (!f.path.startsWith(prefix)) return;
+                        const relPath = f.path.slice(prefix.length);
+                        const parts = relPath.split('/').filter(Boolean);
+                        if (parts.length === 1) {
+                            children.push({ type: 'file', ...f });
+                        } else if (parts.length > 1 && !seenDirs.has(parts[0])) {
+                            seenDirs.add(parts[0]);
+                            children.push({ type: 'dir', name: parts[0], path: prefix + parts[0] });
+                        }
+                    });
+
+                    children.sort((a, b) => {
+                        if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
+                        return a.name.localeCompare(b.name);
+                    });
+
+                    return children;
+                };
+
+                const renderNode = (items, level, parentEl) => {
+                    items.forEach(item => {
+                        const el = document.createElement('div');
+                        el.className = 'tree-item';
+                        el.style.paddingLeft = (12 + level * 16) + 'px';
+                        el.dataset.path = item.path;
+
+                        if (item.type === 'dir') {
+                            el.innerHTML = '<span class="tree-toggle">▶</span><span class="tree-icon">📁</span><span class="tree-label">' + item.name + '</span>';
+                            const toggleDir = () => {
+                                const children = el.nextElementSibling;
+                                if (children && children.classList.contains('tree-children')) {
+                                    children.classList.toggle('expanded');
+                                    const open = children.classList.contains('expanded');
+                                    el.querySelector('.tree-toggle').textContent = open ? '▼' : '▶';
+                                    el.querySelector('.tree-icon').textContent = open ? '📂' : '📁';
+                                }
+                            };
+                            el.addEventListener('click', toggleDir);
+
+                            const childrenContainer = document.createElement('div');
+                            childrenContainer.className = 'tree-children';
+                            const childItems = buildTree(item.path);
+                            renderNode(childItems, level + 1, childrenContainer);
+                            parentEl.appendChild(el);
+                            parentEl.appendChild(childrenContainer);
+                        } else {
+                            const ext = item.name.split('.').pop();
+                            const icon = this.getFileIcon(ext);
+                            el.innerHTML = '<span class="tree-icon">' + icon + '</span><span class="tree-label">' + item.name + '</span>';
+                            el.addEventListener('click', () => this.openFile(item.path));
+                            parentEl.appendChild(el);
+                        }
+                    });
+                };
+
+                const rootItems = buildTree('');
+                renderNode(rootItems, 0, tree);
+            }
+
+            getFileIcon(ext) {
+                const icons = {
+                    'tsx': '⚛️', 'jsx': '⚛️', 'ts': '🔷', 'js': '🟨',
+                    'html': '🌐', 'css': '🎨', 'scss': '🎨', 'json': '📋',
+                    'md': '📝', 'yml': '⚙️', 'yaml': '⚙️', 'py': '🐍',
+                    'go': '🔵', 'rs': '🦀', 'java': '☕', 'cpp': '⚡',
+                    'c': '⚡', 'sql': '🗄️', 'sh': '💻', 'dockerfile': '🐳',
+                    'http': '🌐', 'rest': '🌐'
+                };
+                return icons[ext] || '📄';
+            }
+
+            openFile(path) {
+                const existing = this.tabs.find(t => t.path === path);
+                if (existing) {
+                    this.activateTab(existing.id);
+                    return;
+                }
+
+                const file = this.fileSystem.get(path);
+                if (!file) return;
+
+                const tab = {
+                    id: 'tab-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+                    path: path,
+                    name: path.split('/').pop(),
+                    dirty: false
+                };
+
+                this.tabs.push(tab);
+                this.createEditor(tab);
+                this.activateTab(tab.id);
+                this.renderTabs();
+                this.saveState();
+
+                document.querySelectorAll('.tree-item').forEach(el => {
+                    el.classList.toggle('selected', el.dataset.path === path);
+                });
+            }
+
+            renderTabs() {
+                const bar = document.getElementById('tabBar');
+                bar.innerHTML = '';
+
+                this.tabs.forEach(tab => {
+                    const el = document.createElement('div');
+                    el.className = 'tab ' + (tab.id === this.activeTab ? 'active' : '');
+                    el.dataset.tabId = tab.id;
+                    el.innerHTML = '<span>' + tab.name + '</span>' + (tab.dirty ? '<span class="tab-dirty"></span>' : '') + '<span class="tab-close">✕</span>';
+                    el.addEventListener('click', (e) => {
+                        if (e.target.classList.contains('tab-close')) {
+                            this.closeTab(tab.id);
+                        } else {
+                            this.activateTab(tab.id);
+                        }
+                    });
+                    bar.appendChild(el);
+                });
+            }
+
+            activateTab(tabId) {
+                this.activeTab = tabId;
+
+                document.querySelectorAll('.editor-instance').forEach(el => el.classList.remove('active'));
+                const editorEl = document.getElementById('editor-' + tabId);
+                if (editorEl) editorEl.classList.add('active');
+
+                document.querySelectorAll('.tab').forEach(el => el.classList.toggle('active', el.dataset.tabId === tabId));
+
+                const tab = this.tabs.find(t => t.id === tabId);
+                if (tab) {
+                    this.updateStatusBar();
+                }
+
+                if (this.tabs.length === 0) {
+                    document.getElementById('emptyEditor').style.display = 'flex';
+                } else {
+                    document.getElementById('emptyEditor').style.display = 'none';
+                }
+
+                this.saveState();
+            }
+
+            closeTab(tabId) {
+                const idx = this.tabs.findIndex(t => t.id === tabId);
+                if (idx === -1) return;
+
+                const editor = this.editors.get(tabId);
+                if (editor) editor.dispose();
+                this.editors.delete(tabId);
+
+                const el = document.getElementById('editor-' + tabId);
+                if (el) el.remove();
+
+                this.tabs.splice(idx, 1);
+
+                if (this.activeTab === tabId) {
+                    if (this.tabs.length > 0) {
+                        this.activateTab(this.tabs[Math.min(idx, this.tabs.length - 1)].id);
+                    } else {
+                        this.activeTab = null;
+                        document.getElementById('emptyEditor').style.display = 'flex';
+                    }
+                }
+
+                this.renderTabs();
+                this.saveState();
+            }
+
+            markDirty(tabId, dirty) {
+                const tab = this.tabs.find(t => t.id === tabId);
+                if (tab && tab.dirty !== dirty) {
+                    tab.dirty = dirty;
+                    this.renderTabs();
+                }
+            }
+
+            newFile() {
+                this.untitledCount++;
+                const path = 'untitled-' + this.untitledCount;
+                const tab = {
+                    id: 'tab-' + Date.now(),
+                    path: path,
+                    name: path,
+                    dirty: true
+                };
+                this.tabs.push(tab);
+                this.createEditor(tab);
+                this.activateTab(tab.id);
+                this.renderTabs();
+                this.saveState();
+            }
+
+            saveFile() {
+                if (!this.activeTab) return;
+                const tab = this.tabs.find(t => t.id === this.activeTab);
+                if (!tab) return;
+
+                const editor = this.editors.get(this.activeTab);
+                if (!editor) return;
+
+                const content = editor.getValue();
+
+                if (tab.path.startsWith('untitled-')) {
+                    this.showQuickInput('Save As:', tab.path, (name) => {
+                        if (!name) return;
+                        const newPath = '/' + name;
+                        this.fileSystem.set(newPath, { path: newPath, content, language: this.getLangFromPath(newPath) });
+                        this.dbPut('files', this.fileSystem.get(newPath));
+                        tab.path = newPath;
+                        tab.name = name;
+                        tab.dirty = false;
+                        this.renderTabs();
+                        this.renderFileTree();
+                        this.saveState();
+                        this.showToast('Saved ' + name);
+                    });
+                } else {
+                    const file = this.fileSystem.get(tab.path);
+                    if (file) {
+                        file.content = content;
+                        this.dbPut('files', file);
+                    }
+                    tab.dirty = false;
+                    this.renderTabs();
+                    this.saveState();
+                    this.showToast('Saved ' + tab.name);
+
+                    if (!this.gitChanges.find(c => c.path === tab.path.replace(/^\//, ''))) {
+                        this.gitChanges.push({ path: tab.path.replace(/^\//, ''), status: 'modified' });
+                        this.renderGit();
+                    }
+                }
+            }
+
+            saveAs() {
+                if (!this.activeTab) return;
+                const tab = this.tabs.find(t => t.id === this.activeTab);
+                if (!tab) return;
+
+                const editor = this.editors.get(this.activeTab);
+                if (!editor) return;
+
+                this.showQuickInput('Save As:', tab.name, (name) => {
+                    if (!name) return;
+                    const newPath = '/' + name;
+                    const content = editor.getValue();
+                    this.fileSystem.set(newPath, { path: newPath, content, language: this.getLangFromPath(newPath) });
+                    this.dbPut('files', this.fileSystem.get(newPath));
+                    tab.path = newPath;
+                    tab.name = name;
+                    tab.dirty = false;
+                    this.renderTabs();
+                    this.renderFileTree();
+                    this.saveState();
+                    this.showToast('Saved as ' + name);
+                });
+            }
+
+            showQuickInput(title, value, callback) {
+                const overlay = document.getElementById('quickInputOverlay');
+                const input = document.getElementById('quickInput');
+                input.placeholder = title;
+                input.value = value || '';
+                overlay.classList.add('active');
+                input.focus();
+                input.select();
+
+                const handler = (e) => {
+                    if (e.key === 'Enter') {
+                        callback(input.value);
+                        overlay.classList.remove('active');
+                        input.removeEventListener('keydown', handler);
+                    } else if (e.key === 'Escape') {
+                        overlay.classList.remove('active');
+                        input.removeEventListener('keydown', handler);
+                    }
+                };
+                input.addEventListener('keydown', handler);
+            }
+
+            showQuickOpen() {
+                const files = Array.from(this.fileSystem.keys()).map(p => p.replace(/^\//, ''));
+                this.showQuickInput('Go to file:', '', (query) => {
+                    if (!query) return;
+                    const match = files.find(f => f.toLowerCase().includes(query.toLowerCase()));
+                    if (match) this.openFile('/' + match);
+                });
+            }
+
+            // ==================== TERMINAL ====================
+            initTerminal() {
+                this.terminals = [{ id: 0, name: 'bash', output: [], cwd: '/' }];
+                this.activeTerminal = 0;
+                this.renderTerminalTabs();
+                this.renderTerminalOutput();
+
+                const output = document.getElementById('terminalOutput');
+                output.addEventListener('click', () => {
+                    const input = output.querySelector('.terminal-input');
+                    if (input) input.focus();
+                });
+            }
+
+            renderTerminalTabs() {
+                const tabs = document.getElementById('terminalTabs');
+                tabs.innerHTML = '';
+                this.terminals.forEach((t, i) => {
+                    const el = document.createElement('div');
+                    el.className = 'terminal-tab ' + (i === this.activeTerminal ? 'active' : '');
+                    el.innerHTML = '<span>' + t.name + '</span><span class="terminal-tab-close">✕</span>';
+                    el.addEventListener('click', (e) => {
+                        if (e.target.classList.contains('terminal-tab-close')) {
+                            this.closeTerminal(i);
+                        } else {
+                            this.activeTerminal = i;
+                            this.renderTerminalTabs();
+                            this.renderTerminalOutput();
+                        }
+                    });
+                    tabs.appendChild(el);
+                });
+
+                const addBtn = document.createElement('div');
+                addBtn.className = 'terminal-tab';
+                addBtn.innerHTML = '+';
+                addBtn.style.cursor = 'pointer';
+                addBtn.addEventListener('click', () => this.newTerminal());
+                tabs.appendChild(addBtn);
+            }
+
+            newTerminal() {
+                const id = this.terminals.length;
+                this.terminals.push({ id, name: 'bash-' + (id + 1), output: [], cwd: this.terminalCwd });
+                this.activeTerminal = id;
+                this.renderTerminalTabs();
+                this.renderTerminalOutput();
+            }
+
+            closeTerminal(idx) {
+                if (this.terminals.length <= 1) return;
+                this.terminals.splice(idx, 1);
+                if (this.activeTerminal >= this.terminals.length) {
+                    this.activeTerminal = this.terminals.length - 1;
+                }
+                this.renderTerminalTabs();
+                this.renderTerminalOutput();
+            }
+
+            renderTerminalOutput() {
+                const output = document.getElementById('terminalOutput');
+                const term = this.terminals[this.activeTerminal];
+                if (!term) return;
+
+                let html = '';
+                if (term.output.length === 0) {
+                    html += '<div class="terminal-welcome">Welcome to VS Code: Web Terminal v1.0.0\nType \'help\' for available commands.</div>';
+                }
+
+                term.output.forEach(line => {
+                    html += '<div class="terminal-line">' + this.escapeHtml(line) + '</div>';
+                });
+
+                if (this.claudeMode && term.name === 'claude') {
+                    html += '<div class="terminal-prompt"><span style="color:var(--success)">➜</span> <input type="text" class="terminal-input" id="termInput" autocomplete="off" spellcheck="false"></div>';
+                } else {
+                    html += '<div class="terminal-prompt"><span style="color:var(--success)">' + this.escapeHtml(term.cwd) + '</span> <span style="color:var(--accent)">➜</span> <input type="text" class="terminal-input" id="termInput" autocomplete="off" spellcheck="false"></div>';
+                }
+
+                output.innerHTML = html;
+                output.scrollTop = output.scrollHeight;
+
+                const input = document.getElementById('termInput');
+                if (input) {
+                    input.focus();
+                    input.addEventListener('keydown', (e) => this.handleTerminalKey(e));
+                }
+            }
+
+            handleTerminalKey(e) {
+                const input = e.target;
+                if (e.key === 'Enter') {
+                    const cmd = input.value.trim();
+                    if (!cmd) return;
+
+                    const term = this.terminals[this.activeTerminal];
+                    term.output.push(term.cwd + ' ➜ ' + cmd);
+
+                    if (this.claudeMode) {
+                        this.handleClaudeCommand(cmd);
+                    } else {
+                        this.executeCommand(cmd, term);
+                    }
+
+                    this.commandHistory.push(cmd);
+                    this.historyIndex = this.commandHistory.length;
+                    this.saveState();
+                    this.renderTerminalOutput();
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (this.historyIndex > 0) {
+                        this.historyIndex--;
+                        input.value = this.commandHistory[this.historyIndex] || '';
+                    }
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (this.historyIndex < this.commandHistory.length - 1) {
+                        this.historyIndex++;
+                        input.value = this.commandHistory[this.historyIndex] || '';
+                    } else {
+                        this.historyIndex = this.commandHistory.length;
+                        input.value = '';
+                    }
+                } else if (e.key === 'c' && e.ctrlKey) {
+                    if (this.claudeMode) {
+                        this.claudeInterrupted = true;
+                        const term = this.terminals[this.activeTerminal];
+                        term.output.push('^C');
+                        term.output.push('Interrupted by user');
+                        this.renderTerminalOutput();
+                    }
+                }
+            }
+
+            executeCommand(cmd, term) {
+                const parts = cmd.split(' ').filter(Boolean);
+                const command = parts[0];
+                const args = parts.slice(1);
+
+                switch (command) {
+                    case 'help':
+                        term.output.push('Available commands:\n  ls, ls -la, cd <dir>, cd .., pwd, cat <file>, clear\n  echo <text>, git status, git log, git branch\n  npm run dev, npm install, claude');
+                        break;
+                    case 'ls':
+                        if (args.includes('-la')) {
+                            const files = this.getDirFiles(term.cwd);
+                            term.output.push('total ' + files.length);
+                            files.forEach(f => {
+                                const isDir = !f.includes('.');
+                                term.output.push((isDir ? 'drwxr-xr-x' : '-rw-r--r--') + ' 1 user user ' + (isDir ? 4096 : 1024) + ' Jan 1 00:00 ' + f);
+                            });
+                        } else {
+                            const files = this.getDirFiles(term.cwd);
+                            term.output.push(files.join('  '));
+                        }
+                        break;
+                    case 'cd':
+                        if (args[0] === '..' || args[0] === '../') {
+                            const parts = term.cwd.split('/').filter(Boolean);
+                            parts.pop();
+                            term.cwd = '/' + parts.join('/');
+                            this.terminalCwd = term.cwd;
+                        } else if (args[0]) {
+                            const newPath = args[0].startsWith('/') ? args[0] : term.cwd + '/' + args[0];
+                            const files = this.getDirFiles(newPath);
+                            if (files.length > 0 || newPath === '/') {
+                                term.cwd = newPath;
+                                this.terminalCwd = newPath;
+                            } else {
+                                term.output.push('cd: no such file or directory: ' + args[0]);
+                            }
+                        }
+                        break;
+                    case 'pwd':
+                        term.output.push(term.cwd || '/');
+                        break;
+                    case 'cat':
+                        if (args[0]) {
+                            const path = args[0].startsWith('/') ? args[0] : term.cwd + '/' + args[0];
+                            const file = this.fileSystem.get(path);
+                            if (file) {
+                                term.output.push(file.content);
+                            } else {
+                                term.output.push('cat: ' + args[0] + ': No such file or directory');
+                            }
+                        }
+                        break;
+                    case 'clear':
+                        term.output = [];
+                        break;
+                    case 'echo':
+                        term.output.push(args.join(' '));
+                        break;
+                    case 'git':
+                        this.handleGitCommand(args, term);
+                        break;
+                    case 'npm':
+                        this.handleNpmCommand(args, term);
+                        break;
+                    case 'claude':
+                        this.enterClaudeMode(term);
+                        break;
+                    default:
+                        term.output.push('command not found: ' + command);
+                }
+            }
+
+            getDirFiles(cwd) {
+                const files = [];
+                const seen = new Set();
+                this.fileSystem.forEach((f, path) => {
+                    if (cwd === '/' || cwd === '') {
+                        const top = path.split('/').filter(Boolean)[0];
+                        if (top && !seen.has(top)) {
+                            seen.add(top);
+                            files.push(top);
+                        }
+                    } else {
+                        const rel = path.replace(cwd, '').replace(/^\//, '');
+                        if (rel && !rel.startsWith('/')) {
+                            const first = rel.split('/')[0];
+                            if (first && !seen.has(first)) {
+                                seen.add(first);
+                                files.push(first);
+                            }
+                        }
+                    }
+                });
+                return files;
+            }
+
+            handleGitCommand(args, term) {
+                const sub = args[0];
+                switch (sub) {
+                    case 'status':
+                        term.output.push('On branch ' + this.currentBranch);
+                        if (this.gitChanges.length > 0) {
+                            term.output.push('Changes not staged for commit:');
+                            this.gitChanges.forEach(c => term.output.push('\t' + c.status + ': ' + c.path));
+                        }
+                        if (this.gitStaged.length > 0) {
+                            term.output.push('Changes to be committed:');
+                            this.gitStaged.forEach(c => term.output.push('\tmodified: ' + c.path));
+                        }
+                        if (this.gitChanges.length === 0 && this.gitStaged.length === 0) {
+                            term.output.push('nothing to commit, working tree clean');
+                        }
+                        break;
+                    case 'log':
+                        this.commits.forEach(c => {
+                            term.output.push(c.hash + ' - ' + c.message + ' (' + c.date + ')');
+                        });
+                        break;
+                    case 'branch':
+                        term.output.push('* ' + this.currentBranch);
+                        term.output.push('  develop');
+                        term.output.push('  feature/new-ui');
+                        break;
+                    case 'add':
+                        if (args[1]) {
+                            const path = args[1];
+                            const change = this.gitChanges.find(c => c.path === path || path === '.');
+                            if (change || path === '.') {
+                                if (path === '.') {
+                                    this.gitStaged.push(...this.gitChanges);
+                                    this.gitChanges = [];
+                                } else {
+                                    this.gitStaged.push(change);
+                                    this.gitChanges = this.gitChanges.filter(c => c.path !== path);
+                                }
+                                this.renderGit();
+                                term.output.push('Added to staging area');
+                            }
+                        }
+                        break;
+                    case 'commit':
+                        if (args[1] === '-m' && args[2]) {
+                            const msg = args[2].replace(/^["']|["']$/g, '');
+                            const hash = Math.random().toString(36).substr(2, 7);
+                            this.commits.unshift({ hash, message: msg, author: 'You', date: 'just now', branch: this.currentBranch });
+                            this.gitStaged = [];
+                            this.renderGit();
+                            this.saveState();
+                            term.output.push('[' + this.currentBranch + ' ' + hash + '] ' + msg);
+                        }
+                        break;
+                    default:
+                        term.output.push("git: '" + sub + "' is not a git command");
+                }
+            }
+
+            handleNpmCommand(args, term) {
+                const sub = args[0];
+                if (sub === 'run' && args[1] === 'dev') {
+                    term.output.push('> vscode-web-clone@1.0.0 dev');
+                    term.output.push('> vite');
+                    term.output.push('');
+                    term.output.push('  VITE v5.0.0  ready in 312 ms');
+                    term.output.push('');
+                    term.output.push('  ➜  Local:   http://localhost:3000/');
+                    term.output.push('  ➜  Network: http://10.0.0.5:3000/');
+                    term.output.push('  ➜  press h + enter to show help');
+                    this.outputLogs.vite.push('2:35:00 PM [vite] server restarted');
+                    this.renderOutput();
+                } else if (sub === 'install') {
+                    term.output.push('added 142 packages in 2s');
+                    term.output.push('');
+                    term.output.push('142 packages are looking for funding');
+                    term.output.push('  run `npm fund` for details');
+                } else {
+                    term.output.push('npm ERR! Missing script: "' + (args[1] || '') + '"');
+                }
+            }
+
+            enterClaudeMode(term) {
+                this.claudeMode = true;
+                term.name = 'claude';
+                term.output.push('✻ Claude Code: v2.6.0');
+                term.output.push('Welcome to Claude Code: REPL. Type /help for commands.');
+                this.renderTerminalOutput();
+            }
+
+            async handleClaudeCommand(cmd) {
+                const term = this.terminals[this.activeTerminal];
+
+                if (cmd.startsWith('/')) {
+                    const slash = cmd.slice(1);
+                    switch (slash) {
+                        case 'help':
+                            term.output.push('Available slash commands:');
+                            term.output.push('  /help    - Show this help');
+                            term.output.push('  /clear   - Clear conversation');
+                            term.output.push('  /status  - Show system status');
+                            term.output.push('  /model   - Show current model');
+                            term.output.push('  /exit    - Exit Claude REPL');
+                            break;
+                        case 'clear':
+                            term.output = [];
+                            break;
+                        case 'status':
+                            term.output.push('Model: claude-opus-4-7');
+                            term.output.push('Context: 1.2k / 1M tokens');
+                            term.output.push('Status: Ready');
+                            break;
+                        case 'model':
+                            term.output.push('Current model: claude-opus-4-7');
+                            break;
+                        case 'exit':
+                            this.claudeMode = false;
+                            term.name = 'bash';
+                            term.output.push('Exited Claude REPL');
+                            break;
+                        default:
+                            term.output.push('Unknown slash command: /' + slash);
+                    }
+                    this.renderTerminalOutput();
+                    return;
+                }
+
+                this.claudeInterrupted = false;
+                const currentFile = this.activeTab ? this.tabs.find(t => t.id === this.activeTab)?.path : '';
+                const fileName = currentFile ? currentFile.split('/').pop() : 'App.tsx';
+
+                term.output.push('');
+
+                if (cmd.includes('bug') || cmd.includes('fix') || cmd.includes('App')) {
+                    await this.streamClaudeText('Looking at the code...\n', term);
+                    await this.delay(300);
+                    term.output.push('● Read(src/' + fileName + ')');
+                    this.renderTerminalOutput();
+                    await this.delay(500);
+                }
+
+                const responses = [
+                    "I'll analyze the code and provide a fix. ",
+                    "The issue appears to be in the component logic. ",
+                    "Here's what I found:\n\n",
+                    "1. The state initialization looks correct\n",
+                    "2. The event handler is properly bound\n",
+                    "3. There's a potential issue with the dependency array\n\n",
+                    "Let me apply the fix...\n"
+                ];
+
+                for (const text of responses) {
+                    if (this.claudeInterrupted) break;
+                    await this.streamClaudeText(text, term);
+                }
+
+                if (!this.claudeInterrupted && (cmd.includes('fix') || cmd.includes('edit'))) {
+                    await this.delay(300);
+                    term.output.push('● Edit(src/' + fileName + ')');
+                    term.output.push('  - const [count, setCount] = useState(0);');
+                    term.output.push('  + const [count, setCount] = useState<number>(0);');
+                    this.renderTerminalOutput();
+                    await this.delay(500);
+                }
+
+                if (!this.claudeInterrupted) {
+                    term.output.push('\nDone! The fix has been applied.');
+                }
+
+                this.renderTerminalOutput();
+            }
+
+            async streamClaudeText(text, term) {
+                for (const char of text) {
+                    if (this.claudeInterrupted) break;
+                    const lastIdx = term.output.length - 1;
+                    if (lastIdx >= 0 && !term.output[lastIdx].startsWith('●')) {
+                        term.output[lastIdx] += char;
+                    } else {
+                        term.output.push(char);
+                    }
+                    this.renderTerminalOutput();
+                    await this.delay(30);
+                }
+            }
+
+            delay(ms) {
+                return new Promise(resolve => setTimeout(resolve, ms));
+            }
+
+            // ==================== GIT UI ====================
+            renderGit() {
+                document.getElementById('changesCount').textContent = this.gitChanges.length;
+                document.getElementById('stagedCount').textContent = this.gitStaged.length;
+
+                const changesList = document.getElementById('changesList');
+                changesList.innerHTML = '';
+                this.gitChanges.forEach(c => {
+                    const el = document.createElement('div');
+                    el.className = 'scm-item';
+                    el.innerHTML = '<span class="scm-status scm-modified">M</span><span>' + c.path + '</span>';
+                    el.addEventListener('click', () => this.stageFile(c.path));
+                    changesList.appendChild(el);
+                });
+
+                const stagedList = document.getElementById('stagedList');
+                stagedList.innerHTML = '';
+                this.gitStaged.forEach(c => {
+                    const el = document.createElement('div');
+                    el.className = 'scm-item';
+                    el.innerHTML = '<span class="scm-status scm-added">A</span><span>' + c.path + '</span>';
+                    stagedList.appendChild(el);
+                });
+
+                const branchList = document.getElementById('branchList');
+                branchList.innerHTML = '';
+                ['main', 'develop', 'feature/new-ui'].forEach(b => {
+                    const el = document.createElement('div');
+                    el.className = 'scm-item';
+                    el.innerHTML = '<span>' + (b === this.currentBranch ? '* ' : '  ') + b + '</span>';
+                    branchList.appendChild(el);
+                });
+
+                const commitLog = document.getElementById('commitLog');
+                commitLog.innerHTML = '';
+                this.commits.slice(0, 5).forEach(c => {
+                    const el = document.createElement('div');
+                    el.className = 'scm-item';
+                    el.style.fontSize = '11px';
+                    el.innerHTML = '<span style="color:var(--accent)">' + c.hash + '</span><span style="color:var(--fg-dim)">' + c.message + '</span>';
+                    commitLog.appendChild(el);
+                });
+            }
+
+            stageFile(path) {
+                const change = this.gitChanges.find(c => c.path === path);
+                if (change) {
+                    this.gitStaged.push(change);
+                    this.gitChanges = this.gitChanges.filter(c => c.path !== path);
+                    this.renderGit();
+                }
+            }
+
+            commit(msg) {
+                if (this.gitStaged.length === 0) {
+                    this.showToast('No changes to commit');
+                    return;
+                }
+                const hash = Math.random().toString(36).substr(2, 7);
+                this.commits.unshift({ hash, message: msg, author: 'You', date: 'just now', branch: this.currentBranch });
+                this.gitStaged = [];
+                this.renderGit();
+                this.saveState();
+                this.showToast('Committed: ' + msg);
+            }
+
+            // ==================== EXTENSIONS ====================
+            renderExtensions() {
+                const list = document.getElementById('extensionsList');
+                list.innerHTML = '';
+
+                this.extensions.forEach(ext => {
+                    const el = document.createElement('div');
+                    el.className = 'extension-card';
+                    el.innerHTML = '<div class="extension-header"><div class="extension-icon">' + ext.icon + '</div><div class="extension-info"><div class="extension-name">' + ext.name + '</div><div class="extension-desc">' + ext.desc + '</div><div style="font-size:11px;color:var(--fg-dim);margin-top:4px;">' + ext.category + ' | ' + ext.downloads + ' downloads</div></div></div><div class="extension-actions"><button class="btn ' + (ext.installed ? 'btn-secondary' : 'btn-primary') + '" onclick="app.toggleExtension(\'' + ext.id + '\')">' + (ext.installed ? 'Uninstall' : 'Install') + '</button>' + (ext.installed ? '<span style="font-size:12px;color:var(--success);align-self:center;">✓ Installed</span>' : '') + '</div>';
+                    list.appendChild(el);
+                });
+            }
+
+            toggleExtension(id) {
+                const ext = this.extensions.find(e => e.id === id);
+                if (!ext) return;
+
+                ext.installed = !ext.installed;
+                if (ext.installed) {
+                    this.installedExtensions.add(id);
+                    this.showToast('Installed ' + ext.name);
+                    if (id === 'prettier') this.showToast('Prettier: Format on save enabled');
+                    else if (id === 'eslint') { this.showToast('ESLint: Linting enabled'); this.renderProblems(); }
+                    else if (id === 'gitlens') this.showToast('GitLens: Blame annotations enabled');
+                    else if (id === 'live-server') this.showToast('Live Server: Ready to launch');
+                    else if (id === 'rest-client') this.showToast('REST Client: Ready');
+                } else {
+                    this.installedExtensions.delete(id);
+                    this.showToast('Uninstalled ' + ext.name);
+                }
+
+                this.dbPut('extensions', { id, installed: ext.installed });
+                this.renderExtensions();
+                this.saveState();
+            }
+
+            // ==================== AI AGENT ====================
+            sendAIMessage() {
+                const input = document.getElementById('aiInput');
+                const text = input.value.trim();
+                if (!text) return;
+
+                input.value = '';
+                const chat = document.getElementById('aiChat');
+
+                const userMsg = document.createElement('div');
+                userMsg.className = 'ai-message user';
+                userMsg.textContent = text;
+                chat.appendChild(userMsg);
+
+                const assistantMsg = document.createElement('div');
+                assistantMsg.className = 'ai-message assistant';
+                chat.appendChild(assistantMsg);
+
+                const currentFile = this.activeTab ? this.tabs.find(t => t.id === this.activeTab)?.path : '';
+                const context = currentFile ? ' (analyzing ' + currentFile.split('/').pop() + ')' : '';
+
+                const responses = [
+                    'Analyzing your request' + context + '...\n\n',
+                    'Based on the current context, here\'s my analysis:\n\n',
+                    '1. The code structure looks good overall\n',
+                    '2. Consider adding error handling for edge cases\n',
+                    '3. Type safety could be improved with stricter types\n\n',
+                    'Would you like me to generate a fix or explain any specific part?'
+                ];
+
+                let fullText = '';
+                let idx = 0;
+
+                const stream = () => {
+                    if (idx >= responses.length) return;
+                    const chunk = responses[idx];
+                    let charIdx = 0;
+
+                    const typeChar = () => {
+                        if (charIdx < chunk.length) {
+                            fullText += chunk[charIdx];
+                            assistantMsg.textContent = fullText;
+                            chat.scrollTop = chat.scrollHeight;
+                            charIdx++;
+                            setTimeout(typeChar, 30);
+                        } else {
+                            idx++;
+                            setTimeout(stream, 100);
+                        }
+                    };
+                    typeChar();
+                };
+
+                stream();
+            }
+
+            // ==================== PROBLEMS ====================
+            renderProblems() {
+                const list = document.getElementById('problemsList');
+                list.innerHTML = '';
+
+                this.problems.forEach(p => {
+                    const el = document.createElement('div');
+                    el.className = 'problem-item';
+                    el.innerHTML = '<span class="problem-severity problem-' + p.severity + '">' + (p.severity === 'error' ? '✕' : '⚠') + '</span><div><div>' + p.message + '</div><div style="font-size:11px;color:var(--fg-dim);">' + p.file + ':' + p.line + ':' + p.col + '</div></div>';
+                    el.addEventListener('click', () => this.openFile('/' + p.file));
+                    list.appendChild(el);
+                });
+            }
+
+            // ==================== OUTPUT ====================
+            renderOutput() {
+                const channel = document.getElementById('outputChannel').value;
+                const content = document.getElementById('outputContent');
+                const logs = this.outputLogs[channel] || [];
+                content.innerHTML = logs.map(line => '<div class="output-line">' + this.escapeHtml(line) + '</div>').join('');
+            }
+
+            // ==================== DEBUG ====================
+            evalDebug() {
+                const input = document.getElementById('debugInput');
+                const expr = input.value.trim();
+                if (!expr) return;
+
+                input.value = '';
+                const results = document.getElementById('debugResults');
+
+                try {
+                    const sandbox = new Function('fetch', 'location', 'cookie', 'window', 'document', `
+                        try { return { result: eval(${JSON.stringify(expr)}), error: null }; }
+                        catch (e) { return { result: null, error: e.message }; }
+                    `);
+                    const res = sandbox(undefined, undefined, undefined, undefined, undefined);
+
+                    const el = document.createElement('div');
+                    if (res.error) {
+                        el.className = 'debug-error';
+                        el.textContent = '> ' + expr + '\n' + res.error;
+                    } else {
+                        el.className = 'debug-result';
+                        el.textContent = '> ' + expr + '\n' + JSON.stringify(res.result);
+                    }
+                    results.appendChild(el);
+                } catch (e) {
+                    const el = document.createElement('div');
+                    el.className = 'debug-error';
+                    el.textContent = '> ' + expr + '\n' + e.message;
+                    results.appendChild(el);
+                }
+            }
+
+            renderDebug() {
+                const configs = document.getElementById('debugConfigs');
+                configs.innerHTML = '';
+
+                this.debugConfigs.forEach((cfg, i) => {
+                    const el = document.createElement('div');
+                    el.className = 'debug-config';
+                    el.innerHTML = '<div style="font-weight:600;">' + cfg.name + '</div><div style="font-size:11px;color:var(--fg-dim);">' + cfg.type + ' | ' + cfg.request + '</div>';
+                    el.addEventListener('click', () => this.startDebug(cfg));
+                    configs.appendChild(el);
+                });
+            }
+
+            startDebug(config) {
+                this.showToast('Starting ' + config.name + '...');
+                this.outputLogs.vite.push('[debug] Launched ' + config.name);
+                this.renderOutput();
+                this.switchPanel('debug');
+
+                const results = document.getElementById('debugResults');
+                const el = document.createElement('div');
+                el.className = 'debug-result';
+                el.textContent = '[' + config.name + '] Debugger attached';
+                results.appendChild(el);
+            }
+
+            // ==================== UI HELPERS ====================
+            escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            showToast(message) {
+                const container = document.getElementById('toastContainer');
+                const toast = document.createElement('div');
+                toast.className = 'toast';
+                toast.textContent = message;
+                container.appendChild(toast);
+                setTimeout(() => toast.remove(), 3000);
+            }
+
+            updateStatusBar() {
+                const tab = this.tabs.find(t => t.id === this.activeTab);
+                document.getElementById('statusGit').textContent = this.currentBranch;
+                document.getElementById('statusLang').textContent = tab ? (this.getLangFromPath(tab.path) || 'Plain Text') : 'Plain Text';
+
+                if (tab) {
+                    const editor = this.editors.get(tab.id);
+                    if (editor) {
+                        const pos = editor.getPosition();
+                        document.getElementById('statusCursor').textContent = 'Ln ' + pos.lineNumber + ', Col ' + pos.column;
+
+                        editor.onDidChangeCursorPosition((e) => {
+                            document.getElementById('statusCursor').textContent = 'Ln ' + e.position.lineNumber + ', Col ' + e.position.column;
+                        });
+                    }
+                }
+            }
+
+            switchView(view) {
+                document.querySelectorAll('.activity-icon').forEach(el => el.classList.remove('active'));
+                document.querySelector('.activity-icon[data-view="' + view + '"]').classList.add('active');
+
+                document.querySelectorAll('.sidebar-view').forEach(el => el.classList.add('hidden'));
+                document.getElementById('view-' + view).classList.remove('hidden');
+
+                const headers = {
+                    explorer: 'Explorer', search: 'Search', scm: 'Source Control',
+                    debug: 'Run and Debug', extensions: 'Extensions', ai: 'AI Agent', settings: 'Settings'
+                };
+                document.getElementById('sidebarHeader').textContent = headers[view] || view;
+
+                this.viewStates.activeView = view;
+                this.saveState();
+            }
+
+            switchPanel(panel) {
+                document.querySelectorAll('.panel-tab').forEach(el => el.classList.remove('active'));
+                document.querySelector('.panel-tab[data-panel="' + panel + '"]').classList.add('active');
+
+                document.querySelectorAll('.panel-view').forEach(el => el.classList.add('hidden'));
+                document.getElementById('panel-' + panel).classList.remove('hidden');
+            }
+
+            toggleSidebar() {
+                const sidebar = document.getElementById('sidebar');
+                sidebar.classList.toggle('hidden');
+            }
+
+            toggleTerminal() {
+                const panel = document.getElementById('panel');
+                panel.classList.toggle('hidden');
+            }
+
+            // ==================== COMMAND PALETTE ====================
+            showCommandPalette() {
+                const overlay = document.getElementById('commandPalette');
+                const input = document.getElementById('commandInput');
+                const list = document.getElementById('commandList');
+
+                overlay.classList.add('active');
+                input.value = '';
+                input.focus();
+
+                const commands = [
+                    { name: 'File: New File', action: () => this.newFile() },
+                    { name: 'File: Save', action: () => this.saveFile() },
+                    { name: 'File: Save As', action: () => this.saveAs() },
+                    { name: 'Edit: Undo', action: () => { const ed = this.editors.get(this.activeTab); if (ed) ed.trigger('undo', 'undo', null); } },
+                    { name: 'Edit: Redo', action: () => { const ed = this.editors.get(this.activeTab); if (ed) ed.trigger('redo', 'redo', null); } },
+                    { name: 'Edit: Find', action: () => { const ed = this.editors.get(this.activeTab); if (ed) ed.getAction('actions.find').run(); } },
+                    { name: 'Edit: Replace', action: () => { const ed = this.editors.get(this.activeTab); if (ed) ed.getAction('editor.action.startFindReplaceAction').run(); } },
+                    { name: 'Selection: Select All', action: () => { const ed = this.editors.get(this.activeTab); if (ed) ed.setSelection(ed.getModel().getFullModelRange()); } },
+                    { name: 'View: Toggle Sidebar', action: () => this.toggleSidebar() },
+                    { name: 'View: Toggle Terminal', action: () => this.toggleTerminal() },
+                    { name: 'View: Command Palette', action: () => {} },
+                    { name: 'Go: Go to File', action: () => this.showQuickOpen() },
+                    { name: 'Run: Start Debugging', action: () => this.startDebug(this.debugConfigs[0]) },
+                    { name: 'Terminal: New Terminal', action: () => this.newTerminal() },
+                    { name: 'Git: Commit', action: () => document.getElementById('commitMessage').focus() },
+                    { name: 'Extensions: Show Installed', action: () => this.switchView('extensions') },
+                    { name: 'AI: Open Agent', action: () => this.switchView('ai') },
+                    { name: 'Preferences: Settings', action: () => this.switchView('settings') },
+                    { name: 'Preferences: Color Theme', action: () => this.switchView('settings') }
+                ];
+
+                const render = (filter = '') => {
+                    list.innerHTML = '';
+                    const filtered = commands.filter(c => c.name.toLowerCase().includes(filter.toLowerCase()));
+                    filtered.forEach((cmd, i) => {
+                        const el = document.createElement('div');
+                        el.className = 'command-item ' + (i === 0 ? 'selected' : '');
+                        el.textContent = cmd.name;
+                        el.addEventListener('click', () => { cmd.action(); overlay.classList.remove('active'); });
+                        list.appendChild(el);
+                    });
+                };
+
+                render();
+
+                input.oninput = () => render(input.value);
+                input.onkeydown = (e) => {
+                    if (e.key === 'Enter') {
+                        const selected = list.querySelector('.command-item.selected');
+                        if (selected) selected.click();
+                    } else if (e.key === 'Escape') {
+                        overlay.classList.remove('active');
+                    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        const items = list.querySelectorAll('.command-item');
+                        const current = list.querySelector('.command-item.selected');
+                        let idx = Array.from(items).indexOf(current);
+                        idx = e.key === 'ArrowDown' ? Math.min(idx + 1, items.length - 1) : Math.max(idx - 1, 0);
+                        items.forEach((el, i) => el.classList.toggle('selected', i === idx));
+                    }
+                };
+            }
+
+            // ==================== SEARCH ====================
+            searchFiles() {
+                const query = document.getElementById('searchInput').value;
+                if (!query) return;
+
+                const results = [];
+                const regex = document.getElementById('regexToggle').classList.contains('active');
+
+                this.fileSystem.forEach((file, path) => {
+                    const lines = file.content.split('\n');
+                    lines.forEach((line, i) => {
+                        let match = false;
+                        if (regex) {
+                            try { const re = new RegExp(query, 'i'); match = re.test(line); } catch (e) {}
+                        } else {
+                            match = line.toLowerCase().includes(query.toLowerCase());
+                        }
+                        if (match) results.push({ path, line: i + 1, text: line.trim() });
+                    });
+                });
+
+                const container = document.getElementById('searchResults');
+                container.innerHTML = '';
+                results.forEach(r => {
+                    const el = document.createElement('div');
+                    el.className = 'search-result-item';
+                    el.innerHTML = '<div class="search-result-file">' + r.path + '</div><div class="search-result-line">' + r.line + ': ' + this.escapeHtml(r.text) + '</div>';
+                    el.addEventListener('click', () => {
+                        this.openFile(r.path);
+                        const editor = this.editors.get(this.activeTab);
+                        if (editor) {
+                            editor.setPosition({ lineNumber: r.line, column: 1 });
+                            editor.revealLineInCenter(r.line);
+                        }
+                    });
+                    container.appendChild(el);
+                });
+            }
+
+            // ==================== LIVE SERVER ====================
+            launchLiveServer() {
+                const tab = this.tabs.find(t => t.id === this.activeTab);
+                if (!tab || !tab.path.endsWith('.html')) {
+                    this.showToast('Please open an HTML file first');
+                    return;
+                }
+
+                const file = this.fileSystem.get(tab.path);
+                if (!file) return;
+
+                const modal = document.getElementById('previewModal');
+                const frame = document.getElementById('previewFrame');
+
+                const blob = new Blob([file.content], { type: 'text/html' });
+                frame.src = URL.createObjectURL(blob);
+                modal.classList.add('active');
+
+                this.showToast('Live Server: Started on port 5500');
+            }
+
+            closePreview() {
+                document.getElementById('previewModal').classList.remove('active');
+            }
+
+            // ==================== REST CLIENT ====================
+            async sendRESTRequest() {
+                const tab = this.tabs.find(t => t.id === this.activeTab);
+                if (!tab || (!tab.path.endsWith('.http') && !tab.path.endsWith('.rest'))) {
+                    this.showToast('Please open a .http or .rest file');
+                    return;
+                }
+
+                const file = this.fileSystem.get(tab.path);
+                if (!file) return;
+
+                const lines = file.content.split('\n');
+                const firstLine = lines[0].trim();
+                const [method, url] = firstLine.split(' ');
+
+                try {
+                    const response = await fetch(url, { method: method || 'GET' });
+                    const data = await response.json();
+
+                    this.switchPanel('output');
+                    this.outputLogs.vite.push('[REST] ' + method + ' ' + url);
+                    this.outputLogs.vite.push('[REST] Status: ' + response.status);
+                    this.outputLogs.vite.push('[REST] Response: ' + JSON.stringify(data, null, 2));
+                    this.renderOutput();
+
+                    this.showToast('REST: ' + response.status + ' ' + response.statusText);
+                } catch (e) {
+                    this.showToast('REST Error: ' + e.message);
+                }
+            }
+
+            // ==================== FORMATTING ====================
+            formatDocument() {
+                const editor = this.editors.get(this.activeTab);
+                if (!editor) return;
+
+                if (this.installedExtensions.has('prettier')) {
+                    editor.getAction('editor.action.formatDocument').run();
+                    this.showToast('Formatted with Prettier');
+                } else {
+                    const model = editor.getModel();
+                    const content = model.getValue();
+                    const lines = content.split('\n');
+                    const formatted = lines.map(l => l.trim()).join('\n');
+                    model.setValue(formatted);
+                    this.showToast('Formatted document');
+                }
+
+                const tab = this.tabs.find(t => t.id === this.activeTab);
+                if (tab) this.markDirty(tab.id, true);
+            }
+
+            // ==================== KEYBINDINGS ====================
+            initKeybindings() {
+                document.addEventListener('keydown', (e) => {
+                    const isCmd = e.metaKey || e.ctrlKey;
+
+                    if (isCmd && e.key === 's') {
+                        e.preventDefault();
+                        this.saveFile();
+                    } else if (isCmd && e.key === 'p' && !e.shiftKey) {
+                        e.preventDefault();
+                        this.showQuickOpen();
+                    } else if (isCmd && e.shiftKey && e.key === 'P') {
+                        e.preventDefault();
+                        this.showCommandPalette();
+                    } else if (isCmd && e.key === 'b' && !e.shiftKey) {
+                        e.preventDefault();
+                        this.toggleSidebar();
+                    } else if (isCmd && e.key === 'j') {
+                        e.preventDefault();
+                        this.toggleTerminal();
+                    } else if (isCmd && e.key === 'w') {
+                        e.preventDefault();
+                        if (this.activeTab) this.closeTab(this.activeTab);
+                    } else if (isCmd && e.key === 't') {
+                        e.preventDefault();
+                        this.newFile();
+                    } else if (isCmd && e.key === ',') {
+                        e.preventDefault();
+                        this.switchView('settings');
+                    } else if (isCmd && e.key === 'k') {
+                        e.preventDefault();
+                        const handler = (e2) => {
+                            if (e2.key === 's') {
+                                e2.preventDefault();
+                                this.showToast('Keyboard Shortcuts: Not implemented in web version');
+                            }
+                            document.removeEventListener('keydown', handler);
+                        };
+                        document.addEventListener('keydown', handler);
+                    } else if (isCmd && e.key === '/') {
+                        e.preventDefault();
+                        const ed = this.editors.get(this.activeTab);
+                        if (ed) ed.getAction('editor.action.commentLine').run();
+                    } else if (isCmd && e.key === 'd') {
+                        e.preventDefault();
+                        const ed = this.editors.get(this.activeTab);
+                        if (ed) ed.getAction('editor.action.addSelectionToNextFindMatch').run();
+                    } else if (isCmd && e.shiftKey && e.key === 'l') {
+                        e.preventDefault();
+                        const ed = this.editors.get(this.activeTab);
+                        if (ed) ed.getAction('editor.action.selectHighlights').run();
+                    } else if (e.key === 'F2') {
+                        e.preventDefault();
+                        const ed = this.editors.get(this.activeTab);
+                        if (ed) ed.getAction('editor.action.rename').run();
+                    } else if (isCmd && e.key === 'Enter') {
+                        e.preventDefault();
+                        const ed = this.editors.get(this.activeTab);
+                        if (ed) ed.getAction('editor.action.insertLineAfter').run();
+                    } else if (isCmd && e.shiftKey && e.key === 'Enter') {
+                        e.preventDefault();
+                        const ed = this.editors.get(this.activeTab);
+                        if (ed) ed.getAction('editor.action.insertLineBefore').run();
+                    } else if (e.altKey && e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        const ed = this.editors.get(this.activeTab);
+                        if (ed) ed.getAction('editor.action.moveLinesUpAction').run();
+                    } else if (e.altKey && e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        const ed = this.editors.get(this.activeTab);
+                        if (ed) ed.getAction('editor.action.moveLinesDownAction').run();
+                    } else if (e.altKey && e.shiftKey && e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        const ed = this.editors.get(this.activeTab);
+                        if (ed) ed.getAction('editor.action.copyLinesUpAction').run();
+                    } else if (e.altKey && e.shiftKey && e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        const ed = this.editors.get(this.activeTab);
+                        if (ed) ed.getAction('editor.action.copyLinesDownAction').run();
+                    } else if (isCmd && e.key === ']') {
+                        e.preventDefault();
+                        const ed = this.editors.get(this.activeTab);
+                        if (ed) ed.getAction('editor.action.indentLines').run();
+                    } else if (isCmd && e.key === '[') {
+                        e.preventDefault();
+                        const ed = this.editors.get(this.activeTab);
+                        if (ed) ed.getAction('editor.action.outdentLines').run();
+                    } else if (isCmd && e.key === '\\') {
+                        e.preventDefault();
+                        this.showToast('Split editor: Not implemented in single-file version');
+                    } else if (isCmd && ['1', '2', '3'].includes(e.key)) {
+                        e.preventDefault();
+                        this.showToast('Focus group ' + e.key);
+                    }
+                });
+            }
+
+            // ==================== MENUS ====================
+            initMenus() {
+                const menus = {
+                    file: [
+                        { name: 'New File', shortcut: 'Ctrl+N', action: () => this.newFile() },
+                        { name: 'New Window', action: () => this.showToast('New Window: Not available in browser') },
+                        { separator: true },
+                        { name: 'Open File', shortcut: 'Ctrl+O', action: () => this.showToast('Open File: Use Explorer sidebar') },
+                        { name: 'Open Folder', action: () => this.showToast('Open Folder: Use Explorer sidebar') },
+                        { separator: true },
+                        { name: 'Save', shortcut: 'Ctrl+S', action: () => this.saveFile() },
+                        { name: 'Save As', shortcut: 'Ctrl+Shift+S', action: () => this.saveAs() },
+                        { separator: true },
+                        { name: 'Exit', action: () => this.showToast('Exit: Close browser tab') }
+                    ],
+                    edit: [
+                        { name: 'Undo', shortcut: 'Ctrl+Z', action: () => { const ed = this.editors.get(this.activeTab); if (ed) ed.trigger('undo', 'undo', null); } },
+                        { name: 'Redo', shortcut: 'Ctrl+Shift+Z', action: () => { const ed = this.editors.get(this.activeTab); if (ed) ed.trigger('redo', 'redo', null); } },
+                        { separator: true },
+                        { name: 'Cut', shortcut: 'Ctrl+X', action: () => document.execCommand('cut') },
+                        { name: 'Copy', shortcut: 'Ctrl+C', action: () => document.execCommand('copy') },
+                        { name: 'Paste', shortcut: 'Ctrl+V', action: () => document.execCommand('paste') },
+                        { separator: true },
+                        { name: 'Find', shortcut: 'Ctrl+F', action: () => { const ed = this.editors.get(this.activeTab); if (ed) ed.getAction('actions.find').run(); } },
+                        { name: 'Replace', shortcut: 'Ctrl+H', action: () => { const ed = this.editors.get(this.activeTab); if (ed) ed.getAction('editor.action.startFindReplaceAction').run(); } }
+                    ],
+                    selection: [
+                        { name: 'Select All', shortcut: 'Ctrl+A', action: () => { const ed = this.editors.get(this.activeTab); if (ed) ed.setSelection(ed.getModel().getFullModelRange()); } },
+                        { name: 'Copy Line Down', action: () => { const ed = this.editors.get(this.activeTab); if (ed) ed.getAction('editor.action.copyLinesDownAction').run(); } },
+                        { name: 'Copy Line Up', action: () => { const ed = this.editors.get(this.activeTab); if (ed) ed.getAction('editor.action.copyLinesUpAction').run(); } }
+                    ],
+                    view: [
+                        { name: 'Command Palette', shortcut: 'Ctrl+Shift+P', action: () => this.showCommandPalette() },
+                        { name: 'Open View', action: () => this.showToast('Open View') },
+                        { separator: true },
+                        { name: 'Toggle Sidebar', shortcut: 'Ctrl+B', action: () => this.toggleSidebar() },
+                        { name: 'Toggle Terminal', shortcut: 'Ctrl+J', action: () => this.toggleTerminal() },
+                        { name: 'Toggle Panel', action: () => this.toggleTerminal() }
+                    ],
+                    go: [
+                        { name: 'Go to File', shortcut: 'Ctrl+P', action: () => this.showQuickOpen() },
+                        { name: 'Go to Symbol', shortcut: 'Ctrl+Shift+O', action: () => { const ed = this.editors.get(this.activeTab); if (ed) ed.getAction('editor.action.quickOutline').run(); } },
+                        { name: 'Go to Line', shortcut: 'Ctrl+G', action: () => { const ed = this.editors.get(this.activeTab); if (ed) ed.getAction('editor.action.gotoLine').run(); } }
+                    ],
+                    run: [
+                        { name: 'Start Debugging', shortcut: 'F5', action: () => this.startDebug(this.debugConfigs[0]) },
+                        { name: 'Run Without Debugging', shortcut: 'Ctrl+F5', action: () => this.startDebug(this.debugConfigs[0]) },
+                        { name: 'Stop Debugging', shortcut: 'Shift+F5', action: () => this.showToast('Debugging stopped') }
+                    ],
+                    terminal: [
+                        { name: 'New Terminal', shortcut: 'Ctrl+Shift+`', action: () => this.newTerminal() },
+                        { name: 'Split Terminal', action: () => this.newTerminal() },
+                        { separator: true },
+                        { name: 'Run Task', action: () => this.showToast('Run Task') }
+                    ],
+                    help: [
+                        { name: 'Welcome', action: () => this.showToast('Welcome to VS Code: Web') },
+                        { name: 'Documentation', action: () => window.open('https://code.visualstudio.com/docs', '_blank') },
+                        { name: 'About', action: () => this.showToast('VS Code: Web v1.0.0 - Browser Edition') }
+                    ]
+                };
+
+                document.querySelectorAll('.menu-item').forEach(item => {
+                    const menuName = item.dataset.menu;
+                    const dropdown = document.createElement('div');
+                    dropdown.className = 'menu-dropdown';
+
+                    const items = menus[menuName] || [];
+                    items.forEach(m => {
+                        if (m.separator) {
+                            const sep = document.createElement('div');
+                            sep.className = 'menu-separator';
+                            dropdown.appendChild(sep);
+                        } else {
+                            const el = document.createElement('div');
+                            el.className = 'menu-dropdown-item';
+                            el.innerHTML = '<span>' + m.name + '</span><span class="shortcut">' + (m.shortcut || '') + '</span>';
+                            el.addEventListener('click', () => { m.action(); dropdown.classList.remove('active'); });
+                            dropdown.appendChild(el);
+                        }
+                    });
+
+                    item.appendChild(dropdown);
+
+                    item.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        document.querySelectorAll('.menu-dropdown').forEach(d => d.classList.remove('active'));
+                        dropdown.classList.toggle('active');
+                    });
+                });
+
+                document.addEventListener('click', () => {
+                    document.querySelectorAll('.menu-dropdown').forEach(d => d.classList.remove('active'));
+                });
+            }
+
+            // ==================== RESIZER ====================
+            initResizer() {
+                const resizer = document.getElementById('sidebarResizer');
+                const sidebar = document.getElementById('sidebar');
+                let isResizing = false;
+
+                resizer.addEventListener('mousedown', (e) => {
+                    isResizing = true;
+                    document.body.style.cursor = 'col-resize';
+                    e.preventDefault();
+                });
+
+                document.addEventListener('mousemove', (e) => {
+                    if (!isResizing) return;
+                    const newWidth = e.clientX - 48;
+                    if (newWidth > 150 && newWidth < 500) sidebar.style.width = newWidth + 'px';
+                });
+
+                document.addEventListener('mouseup', () => {
+                    isResizing = false;
+                    document.body.style.cursor = '';
+                });
+            }
+
+            // ==================== STATUS BAR CLICKS ====================
+            initStatusBar() {
+                document.getElementById('statusGit').addEventListener('click', (e) => {
+                    const dropdown = document.getElementById('branchDropdown');
+                    dropdown.style.left = e.target.offsetLeft + 'px';
+                    dropdown.classList.toggle('active');
+                });
+
+                document.getElementById('statusPrettier').addEventListener('click', () => {
+                    this.formatDocument();
+                });
+
+                document.getElementById('statusErrors').addEventListener('click', () => {
+                    this.switchPanel('problems');
+                });
+
+                document.getElementById('statusLang').addEventListener('click', (e) => {
+                    const dropdown = document.getElementById('langDropdown');
+                    dropdown.style.right = (window.innerWidth - e.target.offsetLeft - e.target.offsetWidth) + 'px';
+                    dropdown.classList.toggle('active');
+                });
+
+                document.querySelectorAll('.branch-item').forEach(el => {
+                    el.addEventListener('click', () => {
+                        this.currentBranch = el.dataset.branch;
+                        document.getElementById('statusGit').textContent = this.currentBranch;
+                        document.querySelectorAll('.branch-item').forEach(b => b.classList.remove('active'));
+                        el.classList.add('active');
+                        document.getElementById('branchDropdown').classList.remove('active');
+                        this.saveState();
+                    });
+                });
+
+                document.querySelectorAll('.lang-item').forEach(el => {
+                    el.addEventListener('click', () => {
+                        const lang = el.dataset.lang;
+                        document.getElementById('statusLang').textContent = el.textContent;
+                        document.getElementById('langDropdown').classList.remove('active');
+                        const editor = this.editors.get(this.activeTab);
+                        if (editor) this.monaco.editor.setModelLanguage(editor.getModel(), lang);
+                    });
+                });
+            }
+
+            // ==================== MAIN UI INIT ====================
+            initUI() {
+                document.querySelectorAll('.activity-icon').forEach(el => {
+                    el.addEventListener('click', () => this.switchView(el.dataset.view));
+                });
+
+                document.querySelectorAll('.panel-tab').forEach(el => {
+                    el.addEventListener('click', () => this.switchPanel(el.dataset.panel));
+                });
+
+                document.getElementById('searchInput').addEventListener('input', () => this.searchFiles());
+                document.getElementById('replaceInput').addEventListener('input', () => this.searchFiles());
+
+                document.getElementById('commitBtn').addEventListener('click', () => {
+                    const msg = document.getElementById('commitMessage').value;
+                    if (msg) this.commit(msg);
+                });
+
+                document.getElementById('commitMessage').addEventListener('keydown', (e) => {
+                    if (e.ctrlKey && e.key === 'Enter') {
+                        const msg = e.target.value;
+                        if (msg) this.commit(msg);
+                    }
+                });
+
+                document.getElementById('aiSend').addEventListener('click', () => this.sendAIMessage());
+                document.getElementById('aiInput').addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') this.sendAIMessage();
+                });
+
+                document.getElementById('outputChannel').addEventListener('change', () => this.renderOutput());
+
+                document.getElementById('debugInput').addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') this.evalDebug();
+                });
+
+                document.getElementById('themeSelect').addEventListener('change', (e) => {
+                    this.settings.theme = e.target.value;
+                    if (this.monaco) this.monaco.editor.setTheme(e.target.value);
+                    this.saveState();
+                });
+
+                document.getElementById('fontSizeSelect').addEventListener('change', (e) => {
+                    this.settings.fontSize = parseInt(e.target.value);
+                    this.editors.forEach(editor => editor.updateOptions({ fontSize: this.settings.fontSize }));
+                    this.saveState();
+                });
+
+                this.initStatusBar();
+                this.initTerminal();
+                this.initMenus();
+                this.initResizer();
+                this.initKeybindings();
+
+                this.renderFileTree();
+                this.renderTabs();
+                this.renderExtensions();
+                this.renderGit();
+                this.renderDebug();
+                this.renderProblems();
+                this.renderOutput();
+                this.updateStatusBar();
+
+                if (this.viewStates.activeView) {
+                    this.switchView(this.viewStates.activeView);
+                }
+            }
+        }
+
+        const app = new VSCodeApp();
+        window.app = app;
+    </script>
+</body>
+</html>

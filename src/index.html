@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepSeek IDE</title>
+    <link rel="stylesheet" href="css/app.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+    <script>
+    (function(){
+        var s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js';
+        s.onerror = function(){ window.__monacoFailed = true; };
+        document.head.appendChild(s);
+    })();
+    </script>
+</head>
+<body>
+<div id="app">
+    <div class="menu-bar" id="menuBar">
+        <div class="menu-item" data-menu="file">File</div>
+        <div class="menu-item" data-menu="edit">Edit</div>
+        <div class="menu-item" data-menu="view">View</div>
+        <div class="menu-item" data-menu="terminal">Terminal</div>
+        <div class="menu-item" data-menu="help">Help</div>
+    </div>
+
+    <div class="workbench">
+        <div class="activity-bar" id="activityBar">
+            <div class="activity-icon active" data-view="explorer" title="Explorer (Ctrl+Shift+E)">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M9 2H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V7l-5-5H9z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M9 2v5h5" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M13 5H8a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-9l-5-5H13z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="var(--activity-bar-bg)"/><path d="M13 5v5h5" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="activity-icon" data-view="search" title="Search (Ctrl+Shift+F)">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </div>
+            <div class="activity-icon" data-view="scm" title="Source Control (Ctrl+Shift+G)">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="6" cy="5" r="2.5" stroke="currentColor" stroke-width="1.4"/><circle cx="6" cy="19" r="2.5" stroke="currentColor" stroke-width="1.4"/><circle cx="18" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M6 7.5v9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M6 7.5c0 3 3.5 4.5 6 4.5s6 1.5 6-2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            </div>
+            <div style="flex:1"></div>
+            <div class="activity-icon" data-view="ai" title="AI Agent (Ctrl+Shift+A)">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M8 7V5a4 4 0 0 1 8 0v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="9" cy="13" r="1.5" fill="currentColor"/><circle cx="15" cy="13" r="1.5" fill="currentColor"/><path d="M9 17c1 1 5 1 6 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            </div>
+            <div class="activity-icon" data-view="settings" title="Settings (Ctrl+,)">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            </div>
+        </div>
+
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header" id="sidebarHeader">Explorer</div>
+            <div class="sidebar-content" id="sidebarContent">
+                <div class="sidebar-view" id="view-explorer">
+                    <div id="fileTree" class="file-tree"></div>
+                </div>
+                <div class="sidebar-view hidden" id="view-search">
+                    <div class="search-box">
+                        <input class="search-input" id="searchInput" placeholder="Search across files..." autocomplete="off">
+                        <input class="search-input" id="replaceInput" placeholder="Replace...">
+                    </div>
+                    <div class="search-results" id="searchResults"></div>
+                </div>
+                <div class="sidebar-view hidden" id="view-scm">
+                    <div class="scm-section">
+                        <div class="scm-header">Changes <span id="changesCount">0</span>
+                            <div class="scm-header-actions"><button class="scm-btn" id="stageAllBtn" title="Stage all">+</button></div>
+                        </div>
+                        <div id="changesList"></div>
+                    </div>
+                    <div class="scm-section">
+                        <div class="scm-header">Staged <span id="stagedCount">0</span>
+                            <div class="scm-header-actions"><button class="scm-btn" id="unstageAllBtn" title="Unstage all">-</button></div>
+                        </div>
+                        <div id="stagedList"></div>
+                    </div>
+                    <div class="scm-commit-box">
+                        <textarea class="scm-commit-input" id="commitMessage" placeholder="Message (Ctrl+Enter to commit)"></textarea>
+                        <button class="btn btn-primary" id="commitBtn" style="width:100%">Commit</button>
+                    </div>
+                    <div class="scm-section">
+                        <div class="scm-header">Recent Commits</div>
+                        <div id="commitLog"></div>
+                    </div>
+                </div>
+                <div class="sidebar-view hidden" id="view-ai">
+                    <div class="ai-wrap">
+                        <div class="ai-topbar">
+                            <span class="ai-topbar-title">DeepSeek Agent</span>
+                            <button class="ai-mode-btn approval" id="aiModeBtn" title="Click to switch mode">Approval</button>
+                        </div>
+                        <div class="ai-msgs" id="aiMsgs"></div>
+                        <div class="ai-input-area">
+                            <div class="ai-context-bar" id="aiContextBar">
+                                <button class="ai-context-add" id="aiAddContext" title="Add current file to context">+ Add file</button>
+                            </div>
+                            <div id="aiImagePreview" style="display:none" class="ai-image-preview">
+                                <img id="aiImageThumb" class="ai-image-thumb" src="" alt="">
+                                <button class="ai-image-remove" id="aiImageRemove">✕</button>
+                            </div>
+                            <div class="ai-input-row">
+                                <textarea class="ai-input" id="aiInput" placeholder="Ask AI... (paste image, Shift+Enter for new line)" rows="1"></textarea>
+                                <button class="ai-send-btn" id="aiSendBtn">Send</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="sidebar-view hidden" id="view-settings">
+                    <div class="settings-panel">
+                        <div class="settings-group">
+                            <label class="settings-label">DeepSeek API Key</label>
+                            <div class="settings-desc">platform.deepseek.com</div>
+                            <input type="password" class="settings-input" id="settingsDeepseekKey" placeholder="sk-...">
+                        </div>
+                        <div class="settings-group">
+                            <label class="settings-label">Kimi API Key</label>
+                            <div class="settings-desc">platform.moonshot.cn</div>
+                            <input type="password" class="settings-input" id="settingsKimiKey" placeholder="sk-...">
+                        </div>
+                        <div class="settings-group">
+                            <label class="settings-label">HTTP Proxy</label>
+                            <div class="settings-desc">Optional, e.g. http://127.0.0.1:7890</div>
+                            <input type="text" class="settings-input" id="settingsProxy" placeholder="http://127.0.0.1:7890">
+                        </div>
+                        <div class="settings-group">
+                            <label class="settings-label">DeepSeek Model</label>
+                            <select class="settings-select" id="settingsModel">
+                                <option value="deepseek-chat">deepseek-chat (V3)</option>
+                                <option value="deepseek-reasoner">deepseek-reasoner (R1)</option>
+                            </select>
+                        </div>
+                        <div class="settings-group">
+                            <label class="settings-label">Editor Theme</label>
+                            <select class="settings-select" id="settingsTheme">
+                                <option value="vs-dark">Dark+</option>
+                                <option value="vs">Light+</option>
+                                <option value="hc-black">High Contrast</option>
+                            </select>
+                        </div>
+                        <div class="settings-group">
+                            <label class="settings-label">Font Size</label>
+                            <select class="settings-select" id="settingsFontSize">
+                                <option value="12">12px</option>
+                                <option value="14" selected>14px</option>
+                                <option value="16">16px</option>
+                                <option value="18">18px</option>
+                            </select>
+                        </div>
+                        <button class="settings-save-btn" id="settingsSaveBtn">Save Settings</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="resizer" id="sidebarResizer"></div>
+
+        <div class="editor-area" id="editorArea">
+            <div class="tab-bar" id="tabBar"></div>
+            <div class="editor-container" id="editorContainer">
+                <div class="empty-editor" id="emptyEditor">
+                    <div class="empty-editor-logo">DS</div>
+                    <div>DeepSeek IDE</div>
+                    <div class="empty-editor-subtitle">Open a folder to start (File → Open Folder)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel" id="panel">
+        <div class="panel-tabs">
+            <div class="panel-tab active" data-panel="terminal">Terminal</div>
+            <div class="panel-tab" data-panel="problems">Problems</div>
+            <div class="panel-tab" data-panel="output">Output</div>
+        </div>
+        <div class="panel-content">
+            <div class="panel-view active" id="panel-terminal">
+                <div class="terminal-wrap">
+                    <div class="terminal-tabs" id="terminalTabs">
+                        <span class="new-terminal-btn" id="newTerminalBtn" title="New Terminal">+</span>
+                    </div>
+                    <div class="terminal-body" id="terminalBody"></div>
+                </div>
+            </div>
+            <div class="panel-view" id="panel-problems">
+                <div id="problemsList" style="padding:8px;font-size:12px;color:var(--fg-dim)">No problems detected.</div>
+            </div>
+            <div class="panel-view" id="panel-output">
+                <div class="output-content" id="outputContent">DeepSeek IDE v0.1.0 ready.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar" id="statusBar">
+        <div class="status-left">
+            <span class="status-item" id="statusBranch" title="Git Branch">No folder</span>
+            <span class="status-item" id="statusFolder" title="Open Folder" style="cursor:pointer" onclick="IDE.openFolder()">Open Folder</span>
+        </div>
+        <div class="status-right">
+            <span class="status-item" id="statusModel">deepseek-chat</span>
+            <span class="status-item" id="statusLang">—</span>
+            <span class="status-item" id="statusCursor">Ln 1, Col 1</span>
+        </div>
+    </div>
+</div>
+
+<!-- Diff approval dialog -->
+<div class="diff-panel" id="diffPanel">
+    <div class="diff-dialog">
+        <div class="diff-header">
+            <div class="diff-title">Review AI Changes</div>
+            <div class="diff-file" id="diffFile"></div>
+            <button class="btn btn-secondary" id="diffRejectBtn">Reject</button>
+            <button class="btn btn-primary" id="diffApplyBtn">Apply Changes</button>
+        </div>
+        <div class="diff-editor-wrap" id="diffEditorWrap"></div>
+    </div>
+</div>
+
+<!-- Command palette -->
+<div class="cmd-overlay" id="cmdOverlay">
+    <div class="cmd-box">
+        <input class="cmd-input" id="cmdInput" placeholder="Type a command or file name...">
+        <div class="cmd-list" id="cmdList"></div>
+    </div>
+</div>
+
+<!-- Context menu -->
+<div class="ctx-menu hidden" id="ctxMenu"></div>
+<!-- Toast container -->
+<div class="toast-wrap" id="toastWrap"></div>
+<!-- Loading screen -->
+<div class="loading-screen" id="loadingScreen">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">Loading DeepSeek IDE...</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+<script src="js/ide.js"></script>
+</body>
+</html>
