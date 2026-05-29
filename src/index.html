@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DeepSeek IDE</title>
+    <title>My IDE</title>
     <link rel="stylesheet" href="css/app.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
     <script>
@@ -17,93 +17,85 @@
 </head>
 <body>
 <div id="app">
+    <!-- 菜单栏 -->
     <div class="menu-bar" id="menuBar">
-        <div class="menu-item" data-menu="file">File</div>
-        <div class="menu-item" data-menu="edit">Edit</div>
-        <div class="menu-item" data-menu="view">View</div>
-        <div class="menu-item" data-menu="terminal">Terminal</div>
-        <div class="menu-item" data-menu="help">Help</div>
+        <div class="menu-item" data-menu="file">文件</div>
+        <div class="menu-item" data-menu="edit">编辑</div>
+        <div class="menu-item" data-menu="view">视图</div>
+        <div class="menu-item" data-menu="terminal">终端</div>
+        <div class="menu-item" data-menu="git">Git</div>
+        <div class="menu-item" data-menu="help">帮助</div>
     </div>
 
     <div class="workbench">
+        <!-- 活动栏 -->
         <div class="activity-bar" id="activityBar">
-            <div class="activity-icon active" data-view="explorer" title="Explorer (Ctrl+Shift+E)">
+            <div class="activity-icon active" data-view="explorer" title="文件资源管理器 (Ctrl+Shift+E)">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M9 2H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V7l-5-5H9z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M9 2v5h5" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M13 5H8a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-9l-5-5H13z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="var(--activity-bar-bg)"/><path d="M13 5v5h5" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
             </div>
-            <div class="activity-icon" data-view="search" title="Search (Ctrl+Shift+F)">
+            <div class="activity-icon" data-view="search" title="全局搜索 (Ctrl+Shift+F)">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
             </div>
-            <div class="activity-icon" data-view="scm" title="Source Control (Ctrl+Shift+G)">
+            <div class="activity-icon" data-view="scm" title="源代码管理 (Ctrl+Shift+G)">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="6" cy="5" r="2.5" stroke="currentColor" stroke-width="1.4"/><circle cx="6" cy="19" r="2.5" stroke="currentColor" stroke-width="1.4"/><circle cx="18" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M6 7.5v9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M6 7.5c0 3 3.5 4.5 6 4.5s6 1.5 6-2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
             </div>
             <div style="flex:1"></div>
-            <div class="activity-icon" data-view="ai" title="AI Agent (Ctrl+Shift+A)">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M8 7V5a4 4 0 0 1 8 0v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="9" cy="13" r="1.5" fill="currentColor"/><circle cx="15" cy="13" r="1.5" fill="currentColor"/><path d="M9 17c1 1 5 1 6 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-            </div>
-            <div class="activity-icon" data-view="settings" title="Settings (Ctrl+,)">
+            <div class="activity-icon" data-view="settings" title="设置 (Ctrl+,)">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
             </div>
         </div>
 
+        <!-- 左侧边栏 -->
         <div class="sidebar" id="sidebar">
-            <div class="sidebar-header" id="sidebarHeader">Explorer</div>
+            <div class="sidebar-header" id="sidebarHeader">资源管理器</div>
             <div class="sidebar-content" id="sidebarContent">
+                <!-- 资源管理器 -->
                 <div class="sidebar-view" id="view-explorer">
                     <div id="fileTree" class="file-tree"></div>
                 </div>
+                <!-- 全局搜索 -->
                 <div class="sidebar-view hidden" id="view-search">
                     <div class="search-box">
-                        <input class="search-input" id="searchInput" placeholder="Search across files..." autocomplete="off">
-                        <input class="search-input" id="replaceInput" placeholder="Replace...">
+                        <input class="search-input" id="searchInput" placeholder="在文件中搜索..." autocomplete="off">
+                        <div class="search-opts">
+                            <label class="search-opt-label"><input type="checkbox" id="searchCaseSensitive"> 区分大小写</label>
+                            <label class="search-opt-label"><input type="checkbox" id="searchRegex"> 正则</label>
+                        </div>
                     </div>
                     <div class="search-results" id="searchResults"></div>
                 </div>
+                <!-- 源代码管理 -->
                 <div class="sidebar-view hidden" id="view-scm">
+                    <div class="scm-actions-bar">
+                        <button class="scm-action-btn" id="gitPullBtn" title="Pull">⬇ 拉取</button>
+                        <button class="scm-action-btn" id="gitPushBtn" title="Push">⬆ 推送</button>
+                        <button class="scm-action-btn" id="gitRefreshBtn" title="刷新">↻</button>
+                    </div>
                     <div class="scm-section">
-                        <div class="scm-header">Changes <span id="changesCount">0</span>
-                            <div class="scm-header-actions"><button class="scm-btn" id="stageAllBtn" title="Stage all">+</button></div>
+                        <div class="scm-header">更改 <span id="changesCount">0</span>
+                            <div class="scm-header-actions"><button class="scm-btn" id="stageAllBtn" title="暂存所有">+</button></div>
                         </div>
                         <div id="changesList"></div>
                     </div>
                     <div class="scm-section">
-                        <div class="scm-header">Staged <span id="stagedCount">0</span>
-                            <div class="scm-header-actions"><button class="scm-btn" id="unstageAllBtn" title="Unstage all">-</button></div>
+                        <div class="scm-header">已暂存 <span id="stagedCount">0</span>
+                            <div class="scm-header-actions"><button class="scm-btn" id="unstageAllBtn" title="取消暂存所有">-</button></div>
                         </div>
                         <div id="stagedList"></div>
                     </div>
                     <div class="scm-commit-box">
-                        <textarea class="scm-commit-input" id="commitMessage" placeholder="Message (Ctrl+Enter to commit)"></textarea>
-                        <button class="btn btn-primary" id="commitBtn" style="width:100%">Commit</button>
+                        <textarea class="scm-commit-input" id="commitMessage" placeholder="提交消息 (Ctrl+Enter 提交)"></textarea>
+                        <button class="btn btn-primary" id="commitBtn" style="width:100%">提交</button>
                     </div>
                     <div class="scm-section">
-                        <div class="scm-header">Recent Commits</div>
+                        <div class="scm-header">最近提交</div>
                         <div id="commitLog"></div>
                     </div>
                 </div>
-                <div class="sidebar-view hidden" id="view-ai">
-                    <div class="ai-wrap">
-                        <div class="ai-topbar">
-                            <span class="ai-topbar-title">DeepSeek Agent</span>
-                            <button class="ai-mode-btn approval" id="aiModeBtn" title="Click to switch mode">Approval</button>
-                        </div>
-                        <div class="ai-msgs" id="aiMsgs"></div>
-                        <div class="ai-input-area">
-                            <div class="ai-context-bar" id="aiContextBar">
-                                <button class="ai-context-add" id="aiAddContext" title="Add current file to context">+ Add file</button>
-                            </div>
-                            <div id="aiImagePreview" style="display:none" class="ai-image-preview">
-                                <img id="aiImageThumb" class="ai-image-thumb" src="" alt="">
-                                <button class="ai-image-remove" id="aiImageRemove">✕</button>
-                            </div>
-                            <div class="ai-input-row">
-                                <textarea class="ai-input" id="aiInput" placeholder="Ask AI... (paste image, Shift+Enter for new line)" rows="1"></textarea>
-                                <button class="ai-send-btn" id="aiSendBtn">Send</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <!-- 设置 -->
                 <div class="sidebar-view hidden" id="view-settings">
                     <div class="settings-panel">
+                        <div class="settings-section-title">API 配置</div>
                         <div class="settings-group">
                             <label class="settings-label">DeepSeek API Key</label>
                             <div class="settings-desc">platform.deepseek.com</div>
@@ -111,39 +103,72 @@
                         </div>
                         <div class="settings-group">
                             <label class="settings-label">Kimi API Key</label>
-                            <div class="settings-desc">platform.moonshot.cn</div>
+                            <div class="settings-desc">platform.moonshot.cn（用于图片分析）</div>
                             <input type="password" class="settings-input" id="settingsKimiKey" placeholder="sk-...">
                         </div>
                         <div class="settings-group">
-                            <label class="settings-label">HTTP Proxy</label>
-                            <div class="settings-desc">Optional, e.g. http://127.0.0.1:7890</div>
+                            <label class="settings-label">HTTP 代理</label>
+                            <div class="settings-desc">可选，如 http://127.0.0.1:7890</div>
                             <input type="text" class="settings-input" id="settingsProxy" placeholder="http://127.0.0.1:7890">
                         </div>
+                        <div class="settings-section-title">AI 模型</div>
                         <div class="settings-group">
-                            <label class="settings-label">DeepSeek Model</label>
+                            <label class="settings-label">DeepSeek 模型</label>
                             <select class="settings-select" id="settingsModel">
-                                <option value="deepseek-chat">deepseek-chat (V3)</option>
-                                <option value="deepseek-reasoner">deepseek-reasoner (R1)</option>
+                                <option value="deepseek-chat">deepseek-chat (V3，便宜)</option>
+                                <option value="deepseek-reasoner">deepseek-reasoner (R1，推理)</option>
                             </select>
                         </div>
                         <div class="settings-group">
-                            <label class="settings-label">Editor Theme</label>
+                            <label class="settings-label">AI 系统提示词</label>
+                            <div class="settings-desc">自定义 AI 角色和行为</div>
+                            <textarea class="settings-input settings-textarea" id="settingsSystemPrompt" placeholder="你是一个专业的软件工程师...（留空使用默认）" rows="4"></textarea>
+                        </div>
+                        <div class="settings-section-title">编辑器</div>
+                        <div class="settings-group">
+                            <label class="settings-label">主题</label>
                             <select class="settings-select" id="settingsTheme">
-                                <option value="vs-dark">Dark+</option>
-                                <option value="vs">Light+</option>
-                                <option value="hc-black">High Contrast</option>
+                                <option value="vs-dark">深色+</option>
+                                <option value="vs">浅色+</option>
+                                <option value="hc-black">高对比度</option>
                             </select>
                         </div>
                         <div class="settings-group">
-                            <label class="settings-label">Font Size</label>
+                            <label class="settings-label">字体大小</label>
                             <select class="settings-select" id="settingsFontSize">
                                 <option value="12">12px</option>
+                                <option value="13">13px</option>
                                 <option value="14" selected>14px</option>
                                 <option value="16">16px</option>
                                 <option value="18">18px</option>
                             </select>
                         </div>
-                        <button class="settings-save-btn" id="settingsSaveBtn">Save Settings</button>
+                        <div class="settings-group">
+                            <label class="settings-label">字体</label>
+                            <select class="settings-select" id="settingsFont">
+                                <option value="Cascadia Code,Fira Code,Consolas,monospace">Cascadia Code</option>
+                                <option value="Fira Code,Consolas,monospace">Fira Code</option>
+                                <option value="JetBrains Mono,Consolas,monospace">JetBrains Mono</option>
+                                <option value="Consolas,monospace">Consolas</option>
+                                <option value="SF Mono,monospace">SF Mono</option>
+                            </select>
+                        </div>
+                        <div class="settings-group">
+                            <label class="settings-label">Tab 大小</label>
+                            <select class="settings-select" id="settingsTabSize">
+                                <option value="2">2 空格</option>
+                                <option value="4" selected>4 空格</option>
+                            </select>
+                        </div>
+                        <div class="settings-group settings-row">
+                            <label class="settings-label">自动保存</label>
+                            <label class="settings-toggle"><input type="checkbox" id="settingsAutoSave"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="settings-group settings-row">
+                            <label class="settings-label">自动换行</label>
+                            <label class="settings-toggle"><input type="checkbox" id="settingsWordWrap"><span class="toggle-slider"></span></label>
+                        </div>
+                        <button class="settings-save-btn" id="settingsSaveBtn">保存设置</button>
                     </div>
                 </div>
             </div>
@@ -151,84 +176,157 @@
 
         <div class="resizer" id="sidebarResizer"></div>
 
+        <!-- 编辑器区域 -->
         <div class="editor-area" id="editorArea">
             <div class="tab-bar" id="tabBar"></div>
             <div class="editor-container" id="editorContainer">
                 <div class="empty-editor" id="emptyEditor">
-                    <div class="empty-editor-logo">DS</div>
-                    <div>DeepSeek IDE</div>
-                    <div class="empty-editor-subtitle">Open a folder to start (File → Open Folder)</div>
+                    <div class="empty-editor-logo">MY</div>
+                    <div class="empty-editor-title">My IDE</div>
+                    <div class="empty-editor-subtitle">打开文件夹开始工作（文件 → 打开文件夹）</div>
+                    <div class="empty-editor-shortcuts">
+                        <div><kbd>Ctrl+P</kbd> 快速打开文件</div>
+                        <div><kbd>Ctrl+Shift+P</kbd> 命令面板</div>
+                        <div><kbd>Ctrl+`</kbd> 打开终端</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="resizer resizer-right" id="aiPanelResizer"></div>
+
+        <!-- 右侧 AI 聊天面板 -->
+        <div class="ai-panel" id="aiPanel">
+            <div class="ai-panel-header">
+                <div class="ai-panel-title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="margin-right:6px"><rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M8 7V5a4 4 0 0 1 8 0v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="9" cy="13" r="1.5" fill="currentColor"/><circle cx="15" cy="13" r="1.5" fill="currentColor"/><path d="M9 17c1 1 5 1 6 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    DeepSeek AI
+                </div>
+                <div class="ai-panel-actions">
+                    <button class="ai-mode-btn approval" id="aiModeBtn" title="点击切换审批/自主模式">审批模式</button>
+                    <button class="ai-action-btn" id="aiClearBtn" title="清空对话">🗑</button>
+                    <button class="ai-action-btn" id="aiCollapseBtn" title="收起 AI 面板">»</button>
+                </div>
+            </div>
+
+            <!-- 会话 tab 栏 -->
+            <div class="ai-sessions-bar" id="aiSessionsBar">
+                <div class="ai-session-tab active" data-session="0">对话 1</div>
+                <button class="ai-session-new" id="aiNewSession" title="新建对话">+</button>
+            </div>
+
+            <!-- 消息列表 -->
+            <div class="ai-msgs" id="aiMsgs"></div>
+
+            <!-- Token 计数 -->
+            <div class="ai-token-bar" id="aiTokenBar">
+                <span id="aiTokenCount">0 tokens</span>
+                <span id="aiCostEstimate">≈ ¥0.000</span>
+            </div>
+
+            <!-- 输入区域 -->
+            <div class="ai-input-area">
+                <div class="ai-context-bar" id="aiContextBar">
+                    <button class="ai-context-add" id="aiAddContext" title="添加当前文件到上下文">+ 添加文件</button>
+                </div>
+                <div id="aiImagePreview" style="display:none" class="ai-image-preview">
+                    <img id="aiImageThumb" class="ai-image-thumb" src="" alt="">
+                    <button class="ai-image-remove" id="aiImageRemove">✕</button>
+                </div>
+                <div class="ai-input-row">
+                    <textarea class="ai-input" id="aiInput" placeholder="向 AI 提问... (粘贴图片，Shift+Enter 换行)" rows="1"></textarea>
+                    <button class="ai-send-btn" id="aiSendBtn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                </div>
+                <div class="ai-stop-row" id="aiStopRow" style="display:none">
+                    <button class="ai-stop-btn" id="aiStopBtn">⏹ 停止生成</button>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- 底部面板 -->
     <div class="panel" id="panel">
         <div class="panel-tabs">
-            <div class="panel-tab active" data-panel="terminal">Terminal</div>
-            <div class="panel-tab" data-panel="problems">Problems</div>
-            <div class="panel-tab" data-panel="output">Output</div>
+            <div class="panel-tab active" data-panel="terminal">终端</div>
+            <div class="panel-tab" data-panel="problems">问题</div>
+            <div class="panel-tab" data-panel="output">输出</div>
+            <div class="panel-tab-spacer"></div>
+            <button class="panel-close-btn" id="panelToggleBtn" title="最小化面板">▼</button>
         </div>
         <div class="panel-content">
             <div class="panel-view active" id="panel-terminal">
                 <div class="terminal-wrap">
                     <div class="terminal-tabs" id="terminalTabs">
-                        <span class="new-terminal-btn" id="newTerminalBtn" title="New Terminal">+</span>
+                        <span class="new-terminal-btn" id="newTerminalBtn" title="新建终端">+</span>
                     </div>
                     <div class="terminal-body" id="terminalBody"></div>
                 </div>
             </div>
             <div class="panel-view" id="panel-problems">
-                <div id="problemsList" style="padding:8px;font-size:12px;color:var(--fg-dim)">No problems detected.</div>
+                <div id="problemsList" style="padding:8px;font-size:12px;color:var(--fg-dim)">未检测到问题。</div>
             </div>
             <div class="panel-view" id="panel-output">
-                <div class="output-content" id="outputContent">DeepSeek IDE v0.1.0 ready.</div>
+                <div class="output-content" id="outputContent">My IDE v0.1.0 就绪。</div>
             </div>
         </div>
     </div>
 
+    <!-- 状态栏 -->
     <div class="status-bar" id="statusBar">
         <div class="status-left">
-            <span class="status-item" id="statusBranch" title="Git Branch">No folder</span>
-            <span class="status-item" id="statusFolder" title="Open Folder" style="cursor:pointer" onclick="IDE.openFolder()">Open Folder</span>
+            <span class="status-item status-branch" id="statusBranch" title="Git 分支">无文件夹</span>
+            <span class="status-item status-folder" id="statusFolder" title="打开文件夹">打开文件夹</span>
         </div>
         <div class="status-right">
-            <span class="status-item" id="statusModel">deepseek-chat</span>
-            <span class="status-item" id="statusLang">—</span>
-            <span class="status-item" id="statusCursor">Ln 1, Col 1</span>
+            <span class="status-item status-wordwrap" id="statusWordWrap" title="切换自动换行">换行: 关</span>
+            <span class="status-item" id="statusModel" title="AI 模型">deepseek-chat</span>
+            <span class="status-item" id="statusLang" title="语言">—</span>
+            <span class="status-item" id="statusCursor" title="行列">第 1 行，第 1 列</span>
         </div>
     </div>
 </div>
 
-<!-- Diff approval dialog -->
+<!-- Diff 审批弹窗 -->
 <div class="diff-panel" id="diffPanel">
     <div class="diff-dialog">
         <div class="diff-header">
-            <div class="diff-title">Review AI Changes</div>
+            <div class="diff-title">审查 AI 修改</div>
             <div class="diff-file" id="diffFile"></div>
-            <button class="btn btn-secondary" id="diffRejectBtn">Reject</button>
-            <button class="btn btn-primary" id="diffApplyBtn">Apply Changes</button>
+            <div class="diff-header-actions">
+                <button class="btn btn-secondary" id="diffRejectBtn">拒绝</button>
+                <button class="btn btn-primary" id="diffApplyBtn">应用修改</button>
+            </div>
         </div>
         <div class="diff-editor-wrap" id="diffEditorWrap"></div>
     </div>
 </div>
 
-<!-- Command palette -->
+<!-- 命令面板 (Ctrl+Shift+P) -->
 <div class="cmd-overlay" id="cmdOverlay">
     <div class="cmd-box">
-        <input class="cmd-input" id="cmdInput" placeholder="Type a command or file name...">
+        <input class="cmd-input" id="cmdInput" placeholder="输入命令...">
         <div class="cmd-list" id="cmdList"></div>
     </div>
 </div>
 
-<!-- Context menu -->
+<!-- 文件快速打开面板 (Ctrl+P) -->
+<div class="cmd-overlay" id="filePickerOverlay">
+    <div class="cmd-box">
+        <input class="cmd-input" id="filePickerInput" placeholder="输入文件名以快速打开...">
+        <div class="cmd-list" id="filePickerList"></div>
+    </div>
+</div>
+
+<!-- 右键菜单 -->
 <div class="ctx-menu hidden" id="ctxMenu"></div>
-<!-- Toast container -->
+<!-- Toast 容器 -->
 <div class="toast-wrap" id="toastWrap"></div>
-<!-- Loading screen -->
+<!-- 加载屏幕 -->
 <div class="loading-screen" id="loadingScreen">
     <div class="loading-spinner"></div>
-    <div class="loading-text">Loading DeepSeek IDE...</div>
+    <div class="loading-text">正在加载 My IDE...</div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>

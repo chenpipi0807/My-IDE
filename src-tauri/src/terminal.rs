@@ -122,3 +122,36 @@ pub fn terminal_close(id: String, state: tauri::State<'_, PtyStore>) -> Result<(
     state.lock().unwrap().remove(&id);
     Ok(())
 }
+
+/// 捕获命令输出给 AI 使用（不显示在可视终端中）
+#[tauri::command]
+pub fn terminal_run_capture(cwd: String, command: String) -> Result<String, String> {
+    use std::process::Command;
+    let output = if cfg!(windows) {
+        Command::new("cmd")
+            .current_dir(&cwd)
+            .args(["/C", &command])
+            .output()
+    } else {
+        Command::new("sh")
+            .current_dir(&cwd)
+            .args(["-c", &command])
+            .output()
+    }
+    .map_err(|e| format!("执行命令失败: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    let mut result = String::new();
+    if !stdout.is_empty() { result.push_str(&stdout); }
+    if !stderr.is_empty() {
+        if !result.is_empty() { result.push('\n'); }
+        result.push_str("[stderr]: ");
+        result.push_str(&stderr);
+    }
+    if result.is_empty() {
+        result = format!("（命令退出码: {}）", output.status.code().unwrap_or(-1));
+    }
+    Ok(result)
+}

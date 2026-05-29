@@ -125,3 +125,19 @@ pub fn git_init(cwd: String) -> Result<String, String> {
 pub fn git_is_repo(cwd: String) -> bool {
     run_git(&cwd, &["rev-parse", "--is-inside-work-tree"]).is_ok()
 }
+
+#[tauri::command]
+pub fn git_pull(cwd: String) -> Result<String, String> {
+    run_git(&cwd, &["pull"])
+}
+
+#[tauri::command]
+pub fn git_push(cwd: String) -> Result<String, String> {
+    run_git(&cwd, &["push"])
+}
+
+#[tauri::command]
+pub fn git_branches(cwd: String) -> Result<Vec<String>, String> {
+    let out = run_git(&cwd, &["branch", "-a", "--format=%(refname:short)"])?;
+    Ok(out.lines().filter(|l| !l.is_empty()).map(|l| l.to_string()).collect())
+}

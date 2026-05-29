@@ -36,11 +36,15 @@ pub fn run() {
             git::git_log,
             git::git_init,
             git::git_is_repo,
+            git::git_pull,
+            git::git_push,
+            git::git_branches,
             // Terminal
             terminal::terminal_create,
             terminal::terminal_write,
             terminal::terminal_resize,
             terminal::terminal_close,
+            terminal::terminal_run_capture,
             // AI
             ai::deepseek::ai_chat_deepseek,
             ai::kimi::ai_kimi_vision,
