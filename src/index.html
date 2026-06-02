@@ -213,7 +213,7 @@
                     DeepSeek AI
                 </div>
                 <div class="ai-panel-actions">
-                    <button class="ai-mode-btn approval" id="aiModeBtn" title="点击切换审批/自主模式">审批模式</button>
+                    <button class="ai-mode-btn approval" id="aiModeBtn" title="写文件/执行命令时是否需要手动确认">手动确认</button>
                     <button class="ai-action-btn" id="aiClearBtn" title="清空对话">🗑</button>
                     <button class="ai-action-btn" id="aiCollapseBtn" title="收起 AI 面板">»</button>
                 </div>
@@ -221,8 +221,12 @@
 
             <!-- 快速设置栏 -->
             <div class="ai-quick-settings" id="aiQuickSettings">
+                <!-- 模式选择芯片 -->
+                <div class="ai-qs-modes" id="aiModeChips">
+                    <!-- 由 JS renderModeChips() 动态生成 -->
+                </div>
+                <!-- 模型 + 操作行 -->
                 <div class="ai-qs-row">
-                    <span class="ai-qs-label">模型</span>
                     <select class="ai-qs-select" id="aiModelQuick">
                         <option value="deepseek-v4-flash">Flash（思考）</option>
                         <option value="deepseek-v4-flash-nothink">Flash（极速）</option>
@@ -230,7 +234,19 @@
                         <option value="deepseek-v4-pro-nothink">Pro（快速）</option>
                     </select>
                     <span class="ai-qs-keydot" id="aiKeyDot" title="API Key 状态">●</span>
-                    <button class="ai-qs-settings-link" id="aiOpenSettings" title="打开设置">⚙</button>
+                    <button class="ai-qs-settings-link" id="aiOpenSettings" title="全局设置">⚙</button>
+                    <button class="ai-qs-settings-link" id="aiToggleInstructions" title="编辑当前模式指令">✏</button>
+                </div>
+                <!-- 模式指令编辑面板（默认隐藏） -->
+                <div class="ai-qs-instruct-panel" id="aiInstructPanel" style="display:none">
+                    <div class="ai-qs-instruct-label">角色定义（只读参考）</div>
+                    <div class="ai-qs-instruct-role" id="aiInstructRole"></div>
+                    <div class="ai-qs-instruct-label" style="margin-top:8px">自定义指令（覆盖默认）</div>
+                    <textarea class="ai-qs-instruct-input" id="aiModeInstructions" placeholder="为当前模式添加或覆盖自定义指令..."></textarea>
+                    <div class="ai-qs-instruct-actions">
+                        <button class="ai-qs-btn" id="aiInstructReset">恢复默认</button>
+                        <button class="ai-qs-btn primary" id="aiInstructSave">保存指令</button>
+                    </div>
                 </div>
             </div>
 

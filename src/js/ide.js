@@ -29,6 +29,46 @@ function langFromPath(path) {
     return LANG_MAP[name.split('.').pop()] || 'plaintext';
 }
 
+// ── Roo-Code 风格内置模式 ─────────────────────────────────────────────────────
+const BUILT_IN_MODES = [
+    {
+        slug: 'code',
+        name: '💻 编码',
+        description: '编写、修改、重构代码',
+        whenToUse: '实现功能、修复 Bug、重构代码',
+        roleDefinition: '你是 My IDE 的 AI 编程助手，一名精通多种编程语言、框架和设计模式的资深软件工程师。你擅长编写高质量、可维护的代码，并能准确理解和执行用户的编程需求。',
+        customInstructions: '优先读取相关文件以充分理解上下文，再动手修改。修改文件使用 write_file 工具。遇到不确定之处先向用户确认。',
+        tools: ['read_file', 'write_file', 'list_files', 'search_in_files', 'run_terminal', 'get_git_diff'],
+    },
+    {
+        slug: 'ask',
+        name: '❓ 问答',
+        description: '解答问题、解释代码',
+        whenToUse: '想了解概念、看懂代码、学习技术，不需要修改文件',
+        roleDefinition: '你是 My IDE 的知识助手，专注于解答技术问题、解释代码原理和提供学习指导。你博学多才，善于用清晰的语言解释复杂的技术概念。',
+        customInstructions: '只解释和回答，不要主动修改文件或执行命令，除非用户明确要求。可以读取文件来理解代码后再解释。',
+        tools: ['read_file', 'list_files', 'search_in_files'],
+    },
+    {
+        slug: 'debug',
+        name: '🪲 调试',
+        description: '排查问题、定位 Bug',
+        whenToUse: '遇到报错、程序行为异常、性能问题需要排查',
+        roleDefinition: '你是 My IDE 的调试专家，擅长系统化分析软件问题，通过日志、测试和代码审查定位根本原因。',
+        customInstructions: '先列出 3-5 个可能原因，缩小到最可能的 1-2 个，通过添加日志或测试验证假设，确认后再修复。修复前明确告知用户你的判断。',
+        tools: ['read_file', 'write_file', 'list_files', 'search_in_files', 'run_terminal', 'get_git_diff'],
+    },
+    {
+        slug: 'architect',
+        name: '🏗️ 规划',
+        description: '规划设计、架构分析',
+        whenToUse: '设计新功能、拆分任务、技术选型、架构规划',
+        roleDefinition: '你是 My IDE 的架构规划助手，擅长技术分析、系统设计和任务拆解。你在动手之前充分思考和规划，确保方案可行。',
+        customInstructions: '先收集项目信息，向用户提问澄清需求，再给出详细的实施计划和任务列表。计划得到用户确认后再开始实施。不要在未确认时直接修改代码。',
+        tools: ['read_file', 'list_files', 'search_in_files'],
+    },
+];
+
 // ── 媒体文件类型检测 ───────────────────────────────────────────────────────────
 const MEDIA_MIME = {
     png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
@@ -196,6 +236,7 @@ class IDEApp {
                 theme: 'vs-dark', font_size: 14, font_family: 'Cascadia Code,Fira Code,Consolas,monospace',
                 tab_size: 4, auto_save: false, word_wrap: false,
                 agent_mode: 'approval', deepseek_model: 'deepseek-v4-flash',
+                currentMode: 'code', modeCustomInstructions: {},
                 deepseek_api_key: '', kimi_api_key: '', proxy: '',
                 system_prompt: '',
             };
@@ -896,38 +937,106 @@ class IDEApp {
     }
 
     // ── AI 系统提示词 ─────────────────────────────────────────────────────────
+    // ── 模式管理 ──────────────────────────────────────────────────────────────
+    getCurrentMode() {
+        const slug = this.config.currentMode || 'code';
+        return BUILT_IN_MODES.find(m => m.slug === slug) || BUILT_IN_MODES[0];
+    }
+
+    setMode(slug) {
+        this.config.currentMode = slug;
+        invoke('config_save', { config: this.config }).catch(() => {});
+        this.updateAIPanelState();
+        const mode = this.getCurrentMode();
+        this.toast(`已切换到${mode.name}模式`);
+    }
+
+    renderModeChips() {
+        const container = document.getElementById('aiModeChips');
+        if (!container) return;
+        const currentSlug = this.config.currentMode || 'code';
+        container.innerHTML = '';
+        BUILT_IN_MODES.forEach(mode => {
+            const btn = document.createElement('button');
+            btn.className = 'ai-mode-chip' + (mode.slug === currentSlug ? ' active' : '');
+            btn.dataset.slug = mode.slug;
+            btn.textContent = mode.name;
+            btn.title = `${mode.description}\n\n何时使用: ${mode.whenToUse}`;
+            btn.addEventListener('click', () => this.setMode(mode.slug));
+            container.appendChild(btn);
+        });
+        // Update mode panel header label
+        const modeLabel = document.getElementById('aiModeLabel');
+        const mode = BUILT_IN_MODES.find(m => m.slug === currentSlug) || BUILT_IN_MODES[0];
+        if (modeLabel) modeLabel.textContent = mode.name;
+    }
+
+    toggleModeInstructions() {
+        const panel = document.getElementById('aiInstructPanel');
+        if (!panel) return;
+        const isOpen = panel.style.display !== 'none';
+        if (!isOpen) {
+            const mode = this.getCurrentMode();
+            document.getElementById('aiInstructRole').textContent = mode.roleDefinition;
+            const saved = this.config.modeCustomInstructions?.[mode.slug];
+            document.getElementById('aiModeInstructions').value =
+                (saved !== undefined && saved !== null) ? saved : (mode.customInstructions || '');
+        }
+        panel.style.display = isOpen ? 'none' : 'flex';
+        document.getElementById('aiToggleInstructions')?.classList.toggle('active', !isOpen);
+    }
+
+    saveModeInstructions() {
+        const mode = this.getCurrentMode();
+        const val = document.getElementById('aiModeInstructions').value.trim();
+        if (!this.config.modeCustomInstructions) this.config.modeCustomInstructions = {};
+        this.config.modeCustomInstructions[mode.slug] = val;
+        invoke('config_save', { config: this.config }).catch(() => {});
+        this.toast(`${mode.name}模式指令已保存`, 'success');
+    }
+
+    resetModeInstructions() {
+        const mode = this.getCurrentMode();
+        if (!this.config.modeCustomInstructions) this.config.modeCustomInstructions = {};
+        delete this.config.modeCustomInstructions[mode.slug];
+        document.getElementById('aiModeInstructions').value = mode.customInstructions || '';
+        invoke('config_save', { config: this.config }).catch(() => {});
+        this.toast(`已恢复${mode.name}默认指令`);
+    }
+
     buildSystemPrompt() {
-        const custom = this.config.system_prompt?.trim();
-        let base = custom || `你是 My IDE 的 AI 编程助手，一名专业软件工程师。你帮助用户编写、编辑、调试和理解代码。
+        const mode = this.getCurrentMode();
+        const saved = this.config.modeCustomInstructions?.[mode.slug];
+        const instructions = (saved !== undefined && saved !== null) ? saved : (mode.customInstructions || '');
+        const cwd = this.openedFolder || '（未打开文件夹）';
+        const date = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
 
-可用工具：
-- read_file(path): 读取文件内容
-- write_file(path, content): 写入文件（审批模式下用户先审查差异）
-- list_files(path): 列出目录内容
-- run_terminal(command): 执行 shell 命令并返回输出
-- get_git_diff(file?): 获取 git 差异
-
-当前工作目录: ${this.openedFolder || '（未打开文件夹）'}
-
-修改文件时请使用 write_file 工具。回复请使用中文，代码保持原语言。`;
+        let prompt = mode.roleDefinition;
+        prompt += `\n\n====\n当前工作目录: ${cwd}\n当前日期: ${date}\n当前模式: ${mode.name}（${mode.description}）\n====`;
+        if (instructions) prompt += `\n\n## 工作要求\n${instructions}`;
+        prompt += `\n\n## 可用工具\n${mode.tools.map(t => `- ${t}`).join('\n')}`;
+        prompt += '\n\n回复请使用中文，代码保持原语言。';
 
         if (this.contextFiles.length > 0) {
-            base += '\n\n已加载的上下文文件：\n';
+            prompt += '\n\n## 上下文文件\n';
             this.contextFiles.forEach(f => {
-                base += `\n### ${f.path}\n\`\`\`\n${f.content.slice(0, 8000)}\n\`\`\`\n`;
+                prompt += `\n### ${f.path}\n\`\`\`\n${f.content.slice(0, 8000)}\n\`\`\`\n`;
             });
         }
-        return base;
+        return prompt;
     }
 
     getToolDefinitions() {
-        return [
-            { name: 'read_file', description: '读取文件内容', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件路径' } }, required: ['path'] } },
-            { name: 'write_file', description: '写入文件（审批模式下会显示差异预览）', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件路径' }, content: { type: 'string', description: '文件完整内容' } }, required: ['path', 'content'] } },
-            { name: 'list_files', description: '列出目录内容', parameters: { type: 'object', properties: { path: { type: 'string', description: '目录路径' } }, required: ['path'] } },
-            { name: 'run_terminal', description: '执行 shell 命令并返回输出结果', parameters: { type: 'object', properties: { command: { type: 'string', description: '要执行的命令' } }, required: ['command'] } },
-            { name: 'get_git_diff', description: '获取 git 差异', parameters: { type: 'object', properties: { file: { type: 'string', description: '可选，指定文件路径' } } } },
+        const mode = this.getCurrentMode();
+        const allDefs = [
+            { name: 'read_file', description: '读取文件内容', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件路径（相对或绝对）' } }, required: ['path'] } },
+            { name: 'write_file', description: '写入/创建文件（审批模式会显示差异预览）', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件路径' }, content: { type: 'string', description: '文件完整新内容' } }, required: ['path', 'content'] } },
+            { name: 'list_files', description: '列出目录下的文件和子目录', parameters: { type: 'object', properties: { path: { type: 'string', description: '目录路径' } }, required: ['path'] } },
+            { name: 'search_in_files', description: '在整个项目中全局搜索文本内容', parameters: { type: 'object', properties: { query: { type: 'string', description: '搜索关键词' } }, required: ['query'] } },
+            { name: 'run_terminal', description: '执行 shell 命令并返回完整输出', parameters: { type: 'object', properties: { command: { type: 'string', description: '要执行的命令' } }, required: ['command'] } },
+            { name: 'get_git_diff', description: '获取 git 差异（可选指定文件）', parameters: { type: 'object', properties: { file: { type: 'string', description: '可选，指定文件路径' } } } },
         ];
+        return allDefs.filter(d => mode.tools.includes(d.name));
     }
 
     async executeToolCall(toolCall) {
@@ -981,6 +1090,12 @@ class IDEApp {
                     }
                     return '无活动终端';
                 }
+            }
+            case 'search_in_files': {
+                if (!this.openedFolder) return '未打开文件夹，无法搜索';
+                const results = await invoke('fs_search', { cwd: this.openedFolder, query: args.query || '', caseSensitive: false });
+                if (!results.length) return '未找到匹配内容';
+                return results.slice(0, 30).map(r => `${r.file}:${r.line}: ${r.content}`).join('\n');
             }
             case 'get_git_diff': {
                 if (!this.openedFolder) return '未打开文件夹';
@@ -1293,13 +1408,15 @@ class IDEApp {
         const model = this.config.deepseek_model || 'deepseek-v4-flash';
         const hasKey = !!(this.config.deepseek_api_key);
         const hasKimi = !!(this.config.kimi_api_key);
+        // 模式芯片
+        this.renderModeChips();
         // 快速模型选择器
         const qs = document.getElementById('aiModelQuick');
         if (qs) qs.value = model;
         // API key 状态指示
         const dot = document.getElementById('aiKeyDot');
         if (dot) { dot.className = 'ai-qs-keydot ' + (hasKey ? 'ok' : 'err'); dot.title = hasKey ? 'API Key 已配置' : 'API Key 未配置'; }
-        // 输入框 placeholder 和粘贴提示
+        // 输入框 placeholder
         const input = document.getElementById('aiInput');
         if (input) {
             input.placeholder = hasKimi
@@ -1309,6 +1426,12 @@ class IDEApp {
         // 状态栏模型
         const labels = { 'deepseek-v4-flash': 'Flash(思考)', 'deepseek-v4-flash-nothink': 'Flash(极速)', 'deepseek-v4-pro': 'Pro(思考)', 'deepseek-v4-pro-nothink': 'Pro(快速)' };
         document.getElementById('statusModel').textContent = labels[model] || model;
+        // 指令面板同步（如果已打开）
+        const panel = document.getElementById('aiInstructPanel');
+        if (panel?.style.display !== 'none') {
+            const mode = this.getCurrentMode();
+            document.getElementById('aiInstructRole').textContent = mode.roleDefinition;
+        }
     }
 
     async saveSettings() {
@@ -1737,14 +1860,21 @@ class IDEApp {
         });
         // AI 收起
         document.getElementById('aiCollapseBtn').addEventListener('click', () => this.toggleAIPanel());
-        // AI 模式切换
-        document.getElementById('aiModeBtn').addEventListener('click', () => {
-            this.agentMode = this.agentMode === 'approval' ? 'autonomous' : 'approval';
-            const btn = document.getElementById('aiModeBtn');
-            btn.textContent = this.agentMode === 'approval' ? '审批模式' : '自主模式';
-            btn.className = `ai-mode-btn ${this.agentMode}`;
-            this.toast(`已切换为${this.agentMode === 'approval' ? '审批' : '自主'}模式`);
-        });
+        // AI 审批/自主模式切换（保留，用于 write_file / run_terminal 确认行为）
+        const aiModeBtn = document.getElementById('aiModeBtn');
+        if (aiModeBtn) {
+            aiModeBtn.addEventListener('click', () => {
+                this.agentMode = this.agentMode === 'approval' ? 'autonomous' : 'approval';
+                aiModeBtn.textContent = this.agentMode === 'approval' ? '手动确认' : '自动执行';
+                aiModeBtn.className = `ai-mode-btn ${this.agentMode}`;
+                this.toast(`写文件/执行命令: ${this.agentMode === 'approval' ? '手动确认' : '自动执行'}`);
+            });
+            aiModeBtn.textContent = this.agentMode === 'approval' ? '手动确认' : '自动执行';
+        }
+        // 模式指令编辑器
+        document.getElementById('aiToggleInstructions')?.addEventListener('click', () => this.toggleModeInstructions());
+        document.getElementById('aiInstructSave')?.addEventListener('click', () => this.saveModeInstructions());
+        document.getElementById('aiInstructReset')?.addEventListener('click', () => this.resetModeInstructions());
         // AI 新会话
         document.getElementById('aiNewSession').addEventListener('click', () => this.newSession());
         this.renderSessionTabs();

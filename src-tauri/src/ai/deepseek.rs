@@ -48,7 +48,7 @@ fn build_tools_json(tools: &[Tool]) -> Vec<Value> {
 pub async fn ai_chat_deepseek(
     app: AppHandle,
     request_id: String,
-    messages: Vec<Message>,
+    messages: Vec<Value>,
     tools: Option<Vec<Tool>>,
 ) -> Result<(), String> {
     let config = config_load();
