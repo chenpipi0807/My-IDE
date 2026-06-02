@@ -35,37 +35,151 @@ const BUILT_IN_MODES = [
         slug: 'code',
         name: '💻 编码',
         description: '编写、修改、重构代码',
-        whenToUse: '实现功能、修复 Bug、重构代码',
-        roleDefinition: '你是 My IDE 的 AI 编程助手，一名精通多种编程语言、框架和设计模式的资深软件工程师。你擅长编写高质量、可维护的代码，并能准确理解和执行用户的编程需求。',
-        customInstructions: '优先读取相关文件以充分理解上下文，再动手修改。修改文件使用 write_file 工具。遇到不确定之处先向用户确认。',
+        whenToUse: '实现功能、修复 Bug、新增特性、代码重构',
+        roleDefinition: `你是 My IDE 的 AI 编程专家，精通多种编程语言、框架、设计模式和最佳实践。你擅长编写简洁、高效、可维护的代码，能准确理解用户需求并给出高质量的实现。
+
+你的核心能力：
+- 深入理解代码上下文，给出符合项目风格的实现
+- 识别并避免潜在的 Bug 和安全问题
+- 选择合适的算法和数据结构
+- 遵循 SOLID 原则和项目已有的架构约定
+- 在修改前通过阅读代码充分理解现有逻辑`,
+        customInstructions: `在开始任何修改前，先用 read_file 和 list_files 充分理解项目结构和相关代码上下文。
+
+**修改原则：**
+- 只修改任务要求的部分，不做无关的"顺手清理"
+- 保持与项目现有代码风格一致（命名、缩进、注释语言等）
+- 不添加多余的注释、console.log、调试代码
+- 如果不确定某个设计决策，先问用户再动手
+- 修改多个文件时，逐一确认每个改动的必要性
+
+**工具使用顺序：**
+1. list_files 了解目录结构
+2. read_file 读取相关文件
+3. search_in_files 查找引用/定义
+4. write_file 执行修改
+5. run_terminal 验证（运行测试、编译检查等）`,
         tools: ['read_file', 'write_file', 'list_files', 'search_in_files', 'run_terminal', 'get_git_diff'],
     },
     {
         slug: 'ask',
         name: '❓ 问答',
-        description: '解答问题、解释代码',
-        whenToUse: '想了解概念、看懂代码、学习技术，不需要修改文件',
-        roleDefinition: '你是 My IDE 的知识助手，专注于解答技术问题、解释代码原理和提供学习指导。你博学多才，善于用清晰的语言解释复杂的技术概念。',
-        customInstructions: '只解释和回答，不要主动修改文件或执行命令，除非用户明确要求。可以读取文件来理解代码后再解释。',
+        description: '解释代码、回答技术问题',
+        whenToUse: '理解代码逻辑、学习技术概念、寻求建议，不需要修改文件',
+        roleDefinition: `你是 My IDE 的技术知识助手，专注于解答技术问题、解释代码原理、提供学习指导。你知识渊博，善于把复杂概念用清晰、准确的语言表达出来。
+
+你的特点：
+- 回答深入、具体，不泛泛而谈
+- 主动阅读项目代码来给出针对性的解释
+- 用代码示例辅助说明抽象概念
+- 指出潜在陷阱和注意事项
+- 如有多种方案，说明各自的权衡`,
+        customInstructions: `**核心原则：只解释和建议，不主动修改代码。**
+
+用 read_file / list_files / search_in_files 读取相关代码后再回答，确保解释针对实际代码而非泛泛之谈。
+
+回答时：
+- 先直接回答核心问题，再展开细节
+- 引用具体的代码行/函数名，而不是泛指
+- 用 Mermaid 图表辅助说明复杂流程或架构
+- 如果用户的问题隐含需要修改代码，说明建议方向但不直接动手，除非用户明确要求`,
         tools: ['read_file', 'list_files', 'search_in_files'],
     },
     {
         slug: 'debug',
         name: '🪲 调试',
-        description: '排查问题、定位 Bug',
-        whenToUse: '遇到报错、程序行为异常、性能问题需要排查',
-        roleDefinition: '你是 My IDE 的调试专家，擅长系统化分析软件问题，通过日志、测试和代码审查定位根本原因。',
-        customInstructions: '先列出 3-5 个可能原因，缩小到最可能的 1-2 个，通过添加日志或测试验证假设，确认后再修复。修复前明确告知用户你的判断。',
+        description: '排查报错、定位 Bug',
+        whenToUse: '程序报错、行为异常、性能问题、测试失败',
+        roleDefinition: `你是 My IDE 的调试专家，擅长系统化地诊断和解决软件问题。你不会凭直觉猜测，而是通过证据驱动的方法逐步缩小问题范围，确认根因后再实施修复。
+
+你的调试方法：
+- 系统性地列举所有可能原因，按可能性排序
+- 通过添加日志、检查状态、运行最小复现来验证假设
+- 区分症状和根因，不治标不治本
+- 修复后验证问题是否真正解决，以及是否引入新问题
+- 记录根因和修复思路，防止复发`,
+        customInstructions: `**调试工作流：**
+
+1. **收集信息**：读取报错信息、相关代码、最近的 git 变更（get_git_diff）
+2. **列出假设**：思考 5-7 个可能原因，按可能性从高到低排序
+3. **缩小范围**：选出最可能的 1-2 个，说明推理依据
+4. **验证假设**：添加临时日志（run_terminal）或读取更多代码来确认
+5. **告知用户**：在修复前，明确说明你认为的根因和修复方案，**等待用户确认**
+6. **实施修复**：确认后再用 write_file 修改
+7. **验证修复**：运行测试或重现步骤确认问题已解决，移除临时日志
+
+**不要**：直接猜测然后修改，或者一次性修改多个"可能原因"。`,
         tools: ['read_file', 'write_file', 'list_files', 'search_in_files', 'run_terminal', 'get_git_diff'],
     },
     {
         slug: 'architect',
         name: '🏗️ 规划',
-        description: '规划设计、架构分析',
-        whenToUse: '设计新功能、拆分任务、技术选型、架构规划',
-        roleDefinition: '你是 My IDE 的架构规划助手，擅长技术分析、系统设计和任务拆解。你在动手之前充分思考和规划，确保方案可行。',
-        customInstructions: '先收集项目信息，向用户提问澄清需求，再给出详细的实施计划和任务列表。计划得到用户确认后再开始实施。不要在未确认时直接修改代码。',
-        tools: ['read_file', 'list_files', 'search_in_files'],
+        description: '规划设计、输出方案文档',
+        whenToUse: '设计新功能、技术选型、架构规划、写产品/开发方案',
+        roleDefinition: `你是 My IDE 的架构规划师，兼具技术深度和产品思维。你善于在动手实现之前，充分分析需求、评估方案、识别风险，并将思考结果以清晰的文档形式固化下来。
+
+你的规划方法：
+- 先问问题再给答案：通过提问澄清真实需求
+- 考虑多种实现方案并做权衡分析
+- 将复杂任务拆解为清晰、独立、可执行的子任务
+- 识别依赖关系和潜在风险
+- 用 Mermaid 图表可视化架构和流程
+- 规划文档写入 .plan/ 目录，便于后续模式参考执行`,
+        customInstructions: `**规划工作流：**
+
+1. **了解现状**：用 list_files / read_file 扫描项目结构，了解技术栈和现有架构
+2. **澄清需求**：向用户提出 2-5 个关键问题，消除歧义
+3. **制定方案**：给出详细的技术方案，包含：
+   - 总体架构说明
+   - 技术选型及理由
+   - 任务拆解列表（按依赖顺序）
+   - 关键风险和应对策略
+4. **输出文档**：将方案写入 \`.plan/\` 目录下（如 \`.plan/feature-xxx.md\`），**只写 .md 文件，不修改源代码**
+5. **确认迭代**：询问用户是否满意，根据反馈修订
+
+如果项目已有 \`.plan\` 目录，**先读取其中文件**，了解既有规划后再制定新方案，避免冲突。`,
+        tools: ['read_file', 'write_file', 'list_files', 'search_in_files'],
+    },
+    {
+        slug: 'orchestrator',
+        name: '🪃 指挥官',
+        description: '拆解复杂任务、协调多专家模式依次执行',
+        whenToUse: '面对需要规划+编码+调试多阶段协作的大型任务',
+        roleDefinition: `你是 My IDE 的任务指挥官，负责统筹协调复杂的多步骤任务。你具备对每个专家模式（编码/问答/调试/规划）能力和局限的深刻理解，能够将大任务高效地分解并委托给最合适的专家执行。
+
+你的工作方式类似于项目经理：
+- 你不直接写代码，而是分析全局、制定计划、委托执行、汇总结果
+- 每个子任务都是一个完整的专家会话，有清晰的输入和预期输出
+- 你追踪每个子任务的结果，动态调整后续计划
+- 所有子任务完成后，你向用户提供全面的执行报告`,
+        customInstructions: `## 指挥官工作流程
+
+**第一步：理解与规划**
+用 read_file / list_files 了解项目结构，向用户确认任务目标和约束。然后将任务拆解为 3-8 个子任务，每个子任务需要：
+- 清晰的目标（一个子任务只做一件事）
+- 明确的输入（依赖哪些文件/信息）
+- 明确的输出（完成后产出什么）
+- 指定的执行模式（code/ask/debug/architect）
+
+**第二步：逐一委托**
+使用 \`new_task\` 工具逐个执行子任务。**每次调用 new_task 必须单独调用**，不能与其他工具同时使用。
+
+子任务指令必须包含：
+- 所有必要的背景信息（子任务看不到父对话历史）
+- 明确的任务范围（不要做什么也要说清楚）
+- 期望的输出格式
+
+**第三步：追踪与调整**
+分析每个子任务的结果，决定：
+- 是否需要追加子任务处理未覆盖的情况
+- 是否需要将前一个子任务的结果作为下一个的输入
+- 如果子任务失败，如何重新委托或降级处理
+
+**第四步：汇总报告**
+所有子任务完成后，提供结构化的执行报告：已完成的工作、遇到的问题、用户需要注意的事项。
+
+**重要约束**：new_task 每次只能单独调用，调用前确保已有充分的上下文信息。`,
+        tools: ['read_file', 'list_files', 'search_in_files', 'new_task'],
     },
 ];
 
@@ -215,6 +329,7 @@ class IDEApp {
         this.aiAbortController = null;
         this.attachedImage = null;
         this.contextFiles = [];
+        this.planContext = null;
 
         this.diffEditor = null;
         this.pendingDiff = null;
@@ -350,6 +465,7 @@ class IDEApp {
         document.getElementById('statusFolder').textContent = this.openedFolder.split('/').pop();
         await this.loadFileTree();
         await this.refreshGit();
+        await this.loadPlanContext();
         this.saveWorkspace();
         this.toast(`已打开: ${this.openedFolder}`, 'success');
     }
@@ -439,10 +555,22 @@ class IDEApp {
         const mime = mediaMime(name);
         try {
             if (mime) {
-                // 媒体文件：读取 base64 并创建预览
-                const b64 = await invoke('fs_read_file_base64', { path: normalPath });
                 this.tabs.push({ path: normalPath, name, dirty: false, isMedia: true });
-                this.createMediaPreview(normalPath, name, b64, mime);
+                if (mime === 'image/svg+xml') {
+                    // SVG: read as text and display inline to avoid 0×0 dimension issue with <img>
+                    const svgText = await invoke('fs_read_file', { path: normalPath });
+                    this.createMediaPreview(normalPath, name, svgText, mime);
+                } else {
+                    // convertFileSrc: Tauri 原生协议，WebView 直接读文件，零拷贝，无大文件卡顿
+                    // invoke 已验证在 window.__TAURI__.core，convertFileSrc 在同一模块
+                    const nativeUrl = window.__TAURI__.core.convertFileSrc(normalPath);
+                    this.createMediaPreview(normalPath, name, nativeUrl, mime, true);
+                }
+                this.renderTabs();
+                this.activateTab(normalPath);
+                document.getElementById('statusLang').textContent = mime.split('/')[1]?.toUpperCase() || mime.split('/')[0].toUpperCase();
+                this.saveWorkspace();
+                return;
             } else {
                 const content = await invoke('fs_read_file', { path: normalPath });
                 this.tabs.push({ path: normalPath, name, dirty: false });
@@ -457,33 +585,63 @@ class IDEApp {
         }
     }
 
-    createMediaPreview(path, name, b64, mime) {
+    createMediaPreview(path, name, dataOrUrl, mime, isNativeUrl = false) {
         const editorArea = document.getElementById('editorArea');
         const wrapper = document.createElement('div');
         wrapper.className = 'editor-instance';
         wrapper.dataset.path = path;
-        const dataUrl = `data:${mime};base64,${b64}`;
         const ext = name.split('.').pop().toUpperCase();
+        const isSvg = mime === 'image/svg+xml';
 
         let mediaEl = '';
-        if (isImage(mime)) {
-            mediaEl = `<div class="media-preview-img-wrap"><img class="media-preview-img" src="${dataUrl}" alt="${name}" draggable="false"></div>`;
+        if (isSvg) {
+            // Inline SVG avoids 0×0 dimension problem when SVG has no width/height attrs
+            mediaEl = `<div class="media-preview-img-wrap media-preview-svg">${dataOrUrl}</div>`;
+        } else if (isImage(mime)) {
+            // Phase 1: show loading placeholder — NO src set, zero decode cost on main thread
+            mediaEl = `<div class="media-preview-img-wrap" data-img-wrap="1"><div class="media-loading"><span class="media-loading-spinner"></span>加载中…</div></div>`;
         } else if (isVideo(mime)) {
-            mediaEl = `<video controls preload="metadata" style="max-width:100%"><source src="${dataUrl}" type="${mime}"></video>`;
+            const src = isNativeUrl ? dataOrUrl : `data:${mime};base64,${dataOrUrl}`;
+            mediaEl = `<video controls preload="metadata" style="max-width:100%"><source src="${src}" type="${mime}"></video>`;
         } else if (isAudio(mime)) {
-            mediaEl = `<audio controls style="width:100%"><source src="${dataUrl}" type="${mime}"></audio>`;
+            const src = isNativeUrl ? dataOrUrl : `data:${mime};base64,${dataOrUrl}`;
+            mediaEl = `<audio controls style="width:100%"><source src="${src}" type="${mime}"></audio>`;
         }
 
         wrapper.innerHTML = `<div class="media-preview">
             ${mediaEl}
             <div class="media-info">
-                <span>${name}</span>
-                <span>${ext} · ${(b64.length * 3 / 4 / 1024).toFixed(1)} KB</span>
+                <span>${this.escapeHtml(name)}</span>
+                <span>${ext}</span>
             </div>
         </div>`;
 
         editorArea.appendChild(wrapper);
         this.editors.set(path, { isMedia: true, el: wrapper });
+
+        // Phase 2: decode image off main thread via img.decode() API
+        if (isImage(mime) && !isSvg) {
+            this._loadImageAsync(path, name, wrapper, dataOrUrl, mime, isNativeUrl);
+        }
+    }
+
+    async _loadImageAsync(path, name, wrapper, dataOrUrl, mime, isNativeUrl) {
+        const wrap = wrapper.querySelector('[data-img-wrap]');
+        if (!wrap) return;
+        try {
+            const src = isNativeUrl ? dataOrUrl : `data:${mime};base64,${dataOrUrl}`;
+            const img = new Image();
+            img.className = 'media-preview-img';
+            img.alt = name;
+            img.draggable = false;
+            img.src = src;
+            // img.decode() is off-main-thread in Chromium/WebView2 — won't freeze UI
+            await img.decode();
+            wrap.innerHTML = '';
+            wrap.appendChild(img);
+        } catch (e) {
+            wrap.innerHTML = `<div class="media-loading" style="color:var(--error)">加载失败: ${this.escapeHtml(String(e))}</div>`;
+        }
     }
 
     activateTab(path) {
@@ -562,7 +720,7 @@ class IDEApp {
         try {
             const state = {
                 folder: this.openedFolder,
-                openTabs: this.tabs.map(t => ({ path: t.path, name: t.name })),
+                openTabs: this.tabs.filter(t => !t.isMedia).map(t => ({ path: t.path, name: t.name })),
                 activeTab: this.activeTab,
             };
             await invoke('config_save', { config: { ...this.config, _workspace: JSON.stringify(state) } });
@@ -579,6 +737,7 @@ class IDEApp {
                     document.getElementById('statusFolder').textContent = this.openedFolder.split('/').pop();
                     await this.loadFileTree();
                     await this.refreshGit();
+                    await this.loadPlanContext();
                 } catch {}
             }
             if (state.openTabs?.length) {
@@ -902,8 +1061,8 @@ class IDEApp {
     renderToolCard(tc, container) {
         const el = document.createElement('div');
         el.className = 'ai-tool-card';
-        const toolIcons = { read_file: '📖', write_file: '✏️', list_files: '📂', run_terminal: '⚡', get_git_diff: '🔀' };
-        const toolLabels = { read_file: '读取文件', write_file: '写入文件', list_files: '列出文件', run_terminal: '执行命令', get_git_diff: 'Git Diff' };
+        const toolIcons = { read_file: '📖', write_file: '✏️', list_files: '📂', run_terminal: '⚡', get_git_diff: '🔀', search_in_files: '🔍', new_task: '🪃' };
+        const toolLabels = { read_file: '读取文件', write_file: '写入文件', list_files: '列出文件', run_terminal: '执行命令', get_git_diff: 'Git Diff', search_in_files: '全局搜索', new_task: '委托子任务' };
         let argsStr = '';
         try {
             const parsed = JSON.parse(tc.arguments || '{}');
@@ -1004,8 +1163,8 @@ class IDEApp {
         this.toast(`已恢复${mode.name}默认指令`);
     }
 
-    buildSystemPrompt() {
-        const mode = this.getCurrentMode();
+    buildSystemPrompt(modeOverride = null) {
+        const mode = modeOverride || this.getCurrentMode();
         const saved = this.config.modeCustomInstructions?.[mode.slug];
         const instructions = (saved !== undefined && saved !== null) ? saved : (mode.customInstructions || '');
         const cwd = this.openedFolder || '（未打开文件夹）';
@@ -1017,6 +1176,11 @@ class IDEApp {
         prompt += `\n\n## 可用工具\n${mode.tools.map(t => `- ${t}`).join('\n')}`;
         prompt += '\n\n回复请使用中文，代码保持原语言。';
 
+        // 注入 .plan 文件夹内容（让 AI 了解既有规划）
+        if (this.planContext) {
+            prompt += `\n\n## 项目规划（.plan 目录）\n${this.planContext}`;
+        }
+
         if (this.contextFiles.length > 0) {
             prompt += '\n\n## 上下文文件\n';
             this.contextFiles.forEach(f => {
@@ -1026,15 +1190,16 @@ class IDEApp {
         return prompt;
     }
 
-    getToolDefinitions() {
-        const mode = this.getCurrentMode();
+    getToolDefinitions(modeOverride = null) {
+        const mode = modeOverride || this.getCurrentMode();
         const allDefs = [
             { name: 'read_file', description: '读取文件内容', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件路径（相对或绝对）' } }, required: ['path'] } },
-            { name: 'write_file', description: '写入/创建文件（审批模式会显示差异预览）', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件路径' }, content: { type: 'string', description: '文件完整新内容' } }, required: ['path', 'content'] } },
+            { name: 'write_file', description: '写入/创建文件（审批模式会显示差异预览）。规划模式下只写 .md 文件或 .plan/ 目录内的文件。', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件路径' }, content: { type: 'string', description: '文件完整新内容' } }, required: ['path', 'content'] } },
             { name: 'list_files', description: '列出目录下的文件和子目录', parameters: { type: 'object', properties: { path: { type: 'string', description: '目录路径' } }, required: ['path'] } },
             { name: 'search_in_files', description: '在整个项目中全局搜索文本内容', parameters: { type: 'object', properties: { query: { type: 'string', description: '搜索关键词' } }, required: ['query'] } },
             { name: 'run_terminal', description: '执行 shell 命令并返回完整输出', parameters: { type: 'object', properties: { command: { type: 'string', description: '要执行的命令' } }, required: ['command'] } },
             { name: 'get_git_diff', description: '获取 git 差异（可选指定文件）', parameters: { type: 'object', properties: { file: { type: 'string', description: '可选，指定文件路径' } } } },
+            { name: 'new_task', description: '将子任务委托给指定专家模式执行，等待完成后返回结果摘要。每次只能单独调用此工具。', parameters: { type: 'object', properties: { mode: { type: 'string', description: '目标模式 slug', enum: ['code', 'ask', 'debug', 'architect'] }, message: { type: 'string', description: '发送给子任务 AI 的完整指令（包含所有必要上下文，因为子任务看不到父对话历史）' } }, required: ['mode', 'message'] } },
         ];
         return allDefs.filter(d => mode.tools.includes(d.name));
     }
@@ -1101,8 +1266,122 @@ class IDEApp {
                 if (!this.openedFolder) return '未打开文件夹';
                 return await invoke('git_diff', { cwd: this.openedFolder, file: args.file || null });
             }
+            case 'new_task': {
+                const { mode: subtaskSlug, message: subtaskMsg } = args;
+                this.toast(`🪃 委托子任务 → ${subtaskSlug} 模式`, 'info');
+                try {
+                    const result = await this.runSubtaskAI(subtaskSlug, subtaskMsg);
+                    return `子任务完成（${subtaskSlug} 模式）。\n\n${result}`;
+                } catch (e) {
+                    return `子任务执行失败: ${e}`;
+                }
+            }
             default:
                 return `未知工具: ${toolCall.name}`;
+        }
+    }
+
+    // ── 指挥官子任务执行引擎 ──────────────────────────────────────────────────
+    async runSubtaskAI(modeSlug, message, depth = 0) {
+        if (depth > 4) return '（子任务嵌套深度超限，已终止）';
+
+        const modeObj = BUILT_IN_MODES.find(m => m.slug === modeSlug) || BUILT_IN_MODES[0];
+        const subtaskSession = { messages: [{ role: 'user', content: message }] };
+        const systemPrompt = this.buildSystemPrompt(modeObj);
+        const tools = this.getToolDefinitions(modeObj);
+
+        const runOnePass = () => new Promise(async (resolve, reject) => {
+            const requestId = `sub_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            let assistantText = '';
+            let pendingToolCall = null;
+            const listeners = [];
+            const cleanup = () => listeners.forEach(u => { try { u(); } catch {} });
+
+            const deltaUnlisten = await listen(`ai_delta:${requestId}`, e => {
+                if (e.payload.content) assistantText += e.payload.content;
+            });
+            listeners.push(deltaUnlisten);
+
+            const toolUnlisten = await listen(`ai_tool_call:${requestId}`, e => {
+                pendingToolCall = e.payload;
+            });
+            listeners.push(toolUnlisten);
+
+            const doneUnlisten = await listen(`ai_done:${requestId}`, async () => {
+                cleanup();
+                if (assistantText) subtaskSession.messages.push({ role: 'assistant', content: assistantText });
+
+                if (pendingToolCall) {
+                    const tc = pendingToolCall;
+                    pendingToolCall = null;
+                    try {
+                        // 子任务的 new_task 递归执行（深度+1）
+                        let result;
+                        if (tc.name === 'new_task') {
+                            const tcArgs = JSON.parse(tc.arguments || '{}');
+                            result = await this.runSubtaskAI(tcArgs.mode, tcArgs.message, depth + 1);
+                        } else {
+                            result = await this.executeToolCall(tc);
+                        }
+                        subtaskSession.messages.push({ role: 'assistant', content: null, tool_calls: [{ id: tc.id, type: 'function', function: { name: tc.name, arguments: tc.arguments } }] });
+                        subtaskSession.messages.push({ role: 'tool', content: String(result), tool_call_id: tc.id });
+                        resolve({ hasMore: true });
+                    } catch (e) {
+                        resolve({ hasMore: false, result: `子任务工具出错: ${e}` });
+                    }
+                } else {
+                    resolve({ hasMore: false, result: assistantText });
+                }
+            });
+            listeners.push(doneUnlisten);
+
+            const apiMessages = [
+                { role: 'system', content: systemPrompt },
+                ...subtaskSession.messages.map(m => {
+                    if (m.tool_calls) return { role: 'assistant', content: m.content, tool_calls: m.tool_calls };
+                    if (m.tool_call_id) return { role: 'tool', content: m.content, tool_call_id: m.tool_call_id };
+                    return { role: m.role, content: m.content };
+                })
+            ];
+
+            try {
+                await invoke('ai_chat_deepseek', { requestId, messages: apiMessages, tools });
+            } catch (e) {
+                cleanup();
+                reject(e);
+            }
+        });
+
+        let finalResult = '（子任务无响应）';
+        for (let i = 0; i < 20; i++) {
+            const { hasMore, result } = await runOnePass();
+            if (!hasMore) { finalResult = result; break; }
+        }
+        return finalResult;
+    }
+
+    // ── 读取 .plan 目录 ───────────────────────────────────────────────────────
+    async loadPlanContext() {
+        this.planContext = null;
+        if (!this.openedFolder) return;
+        try {
+            const planDir = `${this.openedFolder}/.plan`;
+            const entry = await invoke('fs_list_dir', { path: planDir });
+            const mdFiles = (entry.children || []).filter(f => !f.is_dir && (f.name.endsWith('.md') || f.name.endsWith('.txt')));
+            if (!mdFiles.length) return;
+            const parts = [];
+            for (const f of mdFiles.slice(0, 5)) {
+                try {
+                    const content = await invoke('fs_read_file', { path: `${planDir}/${f.name}` });
+                    parts.push(`### .plan/${f.name}\n${content.slice(0, 3000)}`);
+                } catch {}
+            }
+            if (parts.length) {
+                this.planContext = parts.join('\n\n');
+                this.toast(`📋 已读取 .plan 目录（${parts.length} 个文件）`, 'info');
+            }
+        } catch {
+            // .plan 目录不存在，忽略
         }
     }
 
@@ -1888,7 +2167,7 @@ class IDEApp {
         });
         // AI 面板打开设置
         document.getElementById('aiOpenSettings').addEventListener('click', () => {
-            document.querySelector('.activity-btn[data-view="settings"]')?.click();
+            document.querySelector('.activity-icon[data-view="settings"]')?.click();
         });
 
         // AI 输入粘贴图片（需要 Kimi Key）
