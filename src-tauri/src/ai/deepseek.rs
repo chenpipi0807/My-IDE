@@ -53,14 +53,18 @@ pub async fn ai_chat_deepseek(
 ) -> Result<(), String> {
     let config = config_load();
 
-    if config.deepseek_api_key.is_empty() {
-        return Err("DeepSeek API key not configured. Please set it in Settings.".to_string());
+    let api_key = config["deepseek_api_key"].as_str().unwrap_or("").to_string();
+    let proxy = config["proxy"].as_str().unwrap_or("").to_string();
+    let model = config["deepseek_model"].as_str().unwrap_or("deepseek-chat").to_string();
+
+    if api_key.is_empty() {
+        return Err("DeepSeek API key 未配置，请在设置中填写。".to_string());
     }
 
-    let client = build_client(&config.proxy)?;
+    let client = build_client(&proxy)?;
 
     let mut body = json!({
-        "model": config.deepseek_model,
+        "model": model,
         "messages": messages,
         "stream": true,
         "temperature": 0.0,
@@ -75,7 +79,7 @@ pub async fn ai_chat_deepseek(
 
     let response = client
         .post("https://api.deepseek.com/v1/chat/completions")
-        .bearer_auth(&config.deepseek_api_key)
+        .bearer_auth(&api_key)
         .json(&body)
         .send()
         .await

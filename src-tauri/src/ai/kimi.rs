@@ -16,11 +16,14 @@ fn build_client(proxy: &str) -> Result<Client, String> {
 pub async fn ai_kimi_vision(image_b64: String, prompt: String) -> Result<String, String> {
     let config = config_load();
 
-    if config.kimi_api_key.is_empty() {
-        return Err("Kimi API key not configured. Please set it in Settings.".to_string());
+    let api_key = config["kimi_api_key"].as_str().unwrap_or("").to_string();
+    let proxy = config["proxy"].as_str().unwrap_or("").to_string();
+
+    if api_key.is_empty() {
+        return Err("Kimi API key 未配置，请在设置中填写。".to_string());
     }
 
-    let client = build_client(&config.proxy)?;
+    let client = build_client(&proxy)?;
 
     let body = json!({
         "model": "moonshot-v1-8k",
@@ -46,7 +49,7 @@ pub async fn ai_kimi_vision(image_b64: String, prompt: String) -> Result<String,
 
     let response = client
         .post("https://api.moonshot.cn/v1/chat/completions")
-        .bearer_auth(&config.kimi_api_key)
+        .bearer_auth(&api_key)
         .json(&body)
         .send()
         .await

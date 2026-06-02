@@ -47,52 +47,91 @@ function fileIcon(name, isDir) {
 // ── Markdown 渲染 ─────────────────────────────────────────────────────────────
 function renderMarkdown(text) {
     if (!text) return '';
-    const escape = s => String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+    const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const inline = s => s
+        .replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+        .replace(/~~([^~]+)~~/g, '<del>$1</del>')
+        .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 
-    let html = '';
     const lines = text.split('\n');
+    const out = [];
     let i = 0;
+    let inList = false;
+
+    const flushList = () => { if (inList) { out.push('</ul>'); inList = false; } };
+
     while (i < lines.length) {
-        const line = lines[i];
+        const raw = lines[i];
+
         // 代码块
-        if (line.startsWith('```')) {
-            const lang = line.slice(3).trim();
+        if (raw.startsWith('```')) {
+            flushList();
+            const lang = esc(raw.slice(3).trim());
             const codeLines = [];
             i++;
             while (i < lines.length && !lines[i].startsWith('```')) {
-                codeLines.push(escape(lines[i]));
+                codeLines.push(esc(lines[i]));
                 i++;
             }
-            html += `<pre class="code-block" data-lang="${escape(lang)}"><button class="copy-code-btn" onclick="IDE.copyCode(this)">复制</button><code class="lang-${escape(lang)}">${codeLines.join('\n')}</code></pre>`;
-        } else {
-            let l = escape(line);
-            // 标题
-            if (l.startsWith('### ')) l = `<h3>${l.slice(4)}</h3>`;
-            else if (l.startsWith('## ')) l = `<h2>${l.slice(3)}</h2>`;
-            else if (l.startsWith('# ')) l = `<h1>${l.slice(2)}</h1>`;
-            // 列表
-            else if (l.startsWith('- ') || l.startsWith('* ')) l = `<li>${l.slice(2)}</li>`;
-            else if (/^\d+\. /.test(l)) l = `<li>${l.replace(/^\d+\. /, '')}</li>`;
-            // 空行
-            else if (l.trim() === '') l = '<br>';
-            else {
-                // 内联格式
-                l = l
-                    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-                    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-                    .replace(/`([^`]+)`/g, '<code>$1</code>')
-                    .replace(/~~([^~]+)~~/g, '<del>$1</del>');
-                l = `<p>${l}</p>`;
-            }
-            html += l;
+            out.push(`<pre data-lang="${lang}" style="position:relative"><button class="copy-code-btn" onclick="IDE.copyCode(this)">复制</button><code class="lang-${lang}">${codeLines.join('\n')}</code></pre>`);
+            i++;
+            continue;
         }
+
+        // 标题
+        const hMatch = raw.match(/^(#{1,3}) (.+)/);
+        if (hMatch) {
+            flushList();
+            const level = hMatch[1].length;
+            out.push(`<h${level}>${inline(esc(hMatch[2]))}</h${level}>`);
+            i++; continue;
+        }
+
+        // 水平线
+        if (/^[-*_]{3,}$/.test(raw.trim())) {
+            flushList();
+            out.push('<hr>');
+            i++; continue;
+        }
+
+        // 无序列表
+        if (/^[-*] /.test(raw)) {
+            if (!inList) { out.push('<ul>'); inList = true; }
+            out.push(`<li>${inline(esc(raw.slice(2)))}</li>`);
+            i++; continue;
+        }
+
+        // 有序列表
+        if (/^\d+\. /.test(raw)) {
+            if (!inList) { out.push('<ul>'); inList = true; }
+            out.push(`<li>${inline(esc(raw.replace(/^\d+\. /, '')))}</li>`);
+            i++; continue;
+        }
+
+        // 引用
+        if (raw.startsWith('> ')) {
+            flushList();
+            out.push(`<blockquote>${inline(esc(raw.slice(2)))}</blockquote>`);
+            i++; continue;
+        }
+
+        // 空行
+        if (raw.trim() === '') {
+            flushList();
+            out.push('<br>');
+            i++; continue;
+        }
+
+        // 普通段落
+        flushList();
+        out.push(`<p>${inline(esc(raw))}</p>`);
         i++;
     }
-    return html;
+    flushList();
+    return out.join('');
 }
 
 // ── IDE 主类 ─────────────────────────────────────────────────────────────────
@@ -485,8 +524,8 @@ class IDEApp {
                 await this.refreshGit();
             });
             el.addEventListener('click', async () => {
-                const diff = await invoke('git_diff', { cwd: this.openedFolder, file: change.path });
-                this.showDiffText(change.path, diff);
+                const fullPath = `${this.openedFolder}/${change.path}`;
+                await this.openGitDiffView(fullPath, change.path.split('/').pop());
             });
             return el;
         };
@@ -516,6 +555,74 @@ class IDEApp {
     showDiffText(path, diffText) {
         document.getElementById('outputContent').textContent = diffText || '(无差异)';
         this.switchPanel('output');
+    }
+
+    // 在编辑器区域打开只读 Git diff 视图（Monaco Diff Editor）
+    async openGitDiffView(filePath, fileName) {
+        if (!this.monaco || !this.openedFolder) return;
+        const viewId = `__git_diff__${filePath}`;
+
+        // 如果已有 diff tab 则激活
+        if (this.tabs.find(t => t.path === viewId)) {
+            this.activateTab(viewId);
+            return;
+        }
+
+        try {
+            // 获取 HEAD 版本（原始）
+            let originalContent = '';
+            try {
+                originalContent = await invoke('git_diff', { cwd: this.openedFolder, file: filePath });
+                // git_diff 返回 unified diff 文本，我们需要真正的文件内容
+                // 用 git show HEAD:file 获取
+            } catch {}
+
+            // 用 show 命令获取 HEAD 内容
+            const { terminal_run_capture } = window.__TAURI__?.core ? {} : {};
+            try {
+                const headContent = await invoke('terminal_run_capture', {
+                    cwd: this.openedFolder,
+                    command: `git show HEAD:${filePath.replace(this.openedFolder + '/', '')}`
+                });
+                originalContent = headContent.startsWith('[stderr]') ? '' : headContent;
+            } catch { originalContent = ''; }
+
+            // 当前磁盘内容（修改后）
+            let modifiedContent = '';
+            try { modifiedContent = await invoke('fs_read_file', { path: filePath }); } catch {}
+
+            // 创建 diff 容器
+            const container = document.getElementById('editorContainer');
+            const div = document.createElement('div');
+            div.className = 'editor-instance';
+            div.dataset.path = viewId;
+            container.appendChild(div);
+
+            const lang = langFromPath(filePath);
+            const originalModel = this.monaco.editor.createModel(originalContent, lang);
+            const modifiedModel = this.monaco.editor.createModel(modifiedContent, lang);
+            const diffEditor = this.monaco.editor.createDiffEditor(div, {
+                theme: this.config.theme === 'vs' ? 'vs' : 'my-dark',
+                fontSize: this.config.font_size || 14,
+                automaticLayout: true,
+                renderSideBySide: true,
+                readOnly: true,
+            });
+            diffEditor.setModel({ original: originalModel, modified: modifiedModel });
+
+            // 注册为 tab（特殊 diff tab）
+            this.tabs.push({ path: viewId, name: `⊞ ${fileName}`, dirty: false, isDiff: true });
+            // 存储 diff editor 实例（用 getValue 返回 modified 内容）
+            this.editors.set(viewId, {
+                layout: () => diffEditor.layout(),
+                dispose: () => diffEditor.dispose(),
+                getValue: () => modifiedContent,
+            });
+            this.renderTabs();
+            this.activateTab(viewId);
+        } catch (e) {
+            this.toast(`无法打开 diff 视图: ${e}`, 'error');
+        }
     }
 
     // ── 终端 ──────────────────────────────────────────────────────────────────
@@ -1128,60 +1235,81 @@ class IDEApp {
         }
     }
 
-    // ── 全局搜索 ──────────────────────────────────────────────────────────────
+    // ── 全局搜索（调用后端 fs_search，搜索所有文件）─────────────────────────
     async searchFiles(query) {
         const results = document.getElementById('searchResults');
-        if (!query) { results.innerHTML = ''; return; }
+        if (!query.trim()) { results.innerHTML = ''; return; }
         results.innerHTML = '<div style="padding:8px 12px;color:var(--fg-dim);font-size:12px">搜索中...</div>';
 
         const caseSensitive = document.getElementById('searchCaseSensitive').checked;
 
-        // 先搜索打开的文件（即时结果）
-        const matches = [];
-        for (const [path, editor] of this.editors) {
-            const content = editor.getValue ? editor.getValue() : '';
-            const lines = content.split('\n');
-            const fileMatches = [];
-            lines.forEach((line, i) => {
-                const lineToCheck = caseSensitive ? line : line.toLowerCase();
-                const queryToCheck = caseSensitive ? query : query.toLowerCase();
-                if (lineToCheck.includes(queryToCheck)) {
-                    fileMatches.push({ line: i + 1, content: line.trim() });
+        try {
+            let rawResults;
+            if (this.openedFolder) {
+                // 后端搜索所有文件
+                rawResults = await invoke('fs_search', { cwd: this.openedFolder, query, caseSensitive });
+            } else {
+                // 无文件夹时仅搜索已打开文件
+                rawResults = [];
+                for (const [path, editor] of this.editors) {
+                    const content = editor.getValue ? editor.getValue() : '';
+                    content.split('\n').forEach((line, i) => {
+                        const lc = caseSensitive ? line : line.toLowerCase();
+                        const qc = caseSensitive ? query : query.toLowerCase();
+                        if (lc.includes(qc)) rawResults.push({ file: path, line: i + 1, content: line.trim() });
+                    });
                 }
+            }
+
+            results.innerHTML = '';
+            if (!rawResults.length) {
+                results.innerHTML = '<div style="padding:8px 12px;color:var(--fg-dim);font-size:12px">无匹配结果。</div>';
+                return;
+            }
+
+            // 按文件分组
+            const byFile = new Map();
+            rawResults.forEach(r => {
+                if (!byFile.has(r.file)) byFile.set(r.file, []);
+                byFile.get(r.file).push(r);
             });
-            if (fileMatches.length > 0) matches.push({ path, lines: fileMatches });
-        }
 
-        results.innerHTML = '';
-        if (matches.length === 0) {
-            results.innerHTML = '<div style="padding:8px 12px;color:var(--fg-dim);font-size:12px">已打开文件中无结果。</div>';
-            return;
-        }
-        matches.forEach(m => {
-            const fileEl = document.createElement('div');
-            fileEl.className = 'search-result-file';
-            const fname = m.path.replace(/\\/g, '/').split('/').pop();
-            fileEl.innerHTML = `${fname} <span class="search-result-count">${m.lines.length} 处</span>`;
-            fileEl.title = m.path;
-            results.appendChild(fileEl);
+            const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            byFile.forEach((lines, filePath) => {
+                const fname = filePath.replace(/\\/g, '/').split('/').pop();
+                const fileEl = document.createElement('div');
+                fileEl.className = 'search-result-file';
+                fileEl.innerHTML = `${this.escapeHtml(fname)} <span class="search-result-count">${lines.length} 处</span>`;
+                fileEl.title = filePath;
+                results.appendChild(fileEl);
 
-            m.lines.slice(0, 15).forEach(l => {
-                const lineEl = document.createElement('div');
-                lineEl.className = 'search-result-line';
-                const escapedContent = this.escapeHtml(l.content);
-                const escapedQuery = this.escapeHtml(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const highlighted = escapedContent.replace(new RegExp(escapedQuery, caseSensitive ? 'g' : 'gi'), '<mark>$&</mark>');
-                lineEl.innerHTML = `<span class="search-line-num">${l.line}</span><span class="search-line-content">${highlighted}</span>`;
-                lineEl.addEventListener('click', () => {
-                    this.openFile(m.path, fname);
-                    setTimeout(() => {
-                        const ed = this.editors.get(m.path);
-                        if (ed?.revealLineInCenter) ed.revealLineInCenter(l.line);
-                    }, 200);
+                lines.slice(0, 20).forEach(r => {
+                    const lineEl = document.createElement('div');
+                    lineEl.className = 'search-result-line';
+                    const escaped = this.escapeHtml(r.content);
+                    const highlighted = escaped.replace(new RegExp(escapedQuery, caseSensitive ? 'g' : 'gi'), '<mark>$&</mark>');
+                    lineEl.innerHTML = `<span class="search-line-num">${r.line}</span><span class="search-line-content">${highlighted}</span>`;
+                    lineEl.addEventListener('click', () => {
+                        this.openFile(filePath, fname);
+                        setTimeout(() => {
+                            const ed = this.editors.get(filePath);
+                            if (ed?.revealLineInCenter) ed.revealLineInCenter(r.line);
+                            if (ed?.setPosition) ed.setPosition({ lineNumber: r.line, column: 1 });
+                        }, 300);
+                    });
+                    results.appendChild(lineEl);
                 });
-                results.appendChild(lineEl);
             });
-        });
+
+            if (rawResults.length >= 500) {
+                const note = document.createElement('div');
+                note.style.cssText = 'padding:6px 12px;color:var(--fg-dim);font-size:11px';
+                note.textContent = '结果过多，已截断至 500 条';
+                results.appendChild(note);
+            }
+        } catch (e) {
+            results.innerHTML = `<div style="padding:8px 12px;color:var(--error);font-size:12px">搜索出错: ${this.escapeHtml(String(e))}</div>`;
+        }
     }
 
     // ── 命令面板 ──────────────────────────────────────────────────────────────
@@ -1253,6 +1381,7 @@ class IDEApp {
         const input = document.getElementById('filePickerInput');
         input.value = '';
         input.focus();
+        this._filePickerIdx = 0;
         this.renderFilePicker('');
     }
 
@@ -1265,20 +1394,42 @@ class IDEApp {
             return;
         }
 
-        // 显示已打开文件 + 当前文件树
-        const allFiles = this.collectAllFiles(this.fileTree, []);
+        // 已打开标签优先显示
+        const openPaths = new Set(this.tabs.map(t => t.path));
+
+        let allFiles;
+        try {
+            allFiles = await invoke('fs_find_files', { cwd: this.openedFolder });
+        } catch {
+            // 降级到内存文件树
+            allFiles = this.collectAllFiles(this.fileTree, []).map(f => f.path);
+        }
+
         const matched = query
-            ? allFiles.filter(f => f.name.toLowerCase().includes(query.toLowerCase()))
+            ? allFiles.filter(p => p.replace(/\\/g, '/').split('/').pop().toLowerCase().includes(query.toLowerCase()))
             : allFiles;
 
-        matched.slice(0, 20).forEach((file, idx) => {
+        // 最近打开的排在最前
+        matched.sort((a, b) => {
+            const aOpen = openPaths.has(a.replace(/\\/g, '/')) ? 0 : 1;
+            const bOpen = openPaths.has(b.replace(/\\/g, '/')) ? 0 : 1;
+            return aOpen - bOpen;
+        });
+
+        this._filePickerFiles = matched;
+        this._filePickerIdx = 0;
+
+        matched.slice(0, 30).forEach((filePath, idx) => {
+            const fp = filePath.replace(/\\/g, '/');
+            const name = fp.split('/').pop();
+            const relPath = fp.replace(this.openedFolder + '/', '');
             const el = document.createElement('div');
             el.className = 'cmd-item' + (idx === 0 ? ' selected' : '');
-            const relPath = file.path.replace(this.openedFolder + '/', '');
-            el.innerHTML = `<span>${this.escapeHtml(file.name)}</span><span class="shortcut" style="font-size:11px">${this.escapeHtml(relPath)}</span>`;
+            const isOpen = openPaths.has(fp);
+            el.innerHTML = `<span>${this.escapeHtml(name)}${isOpen ? ' <span style="color:var(--accent);font-size:10px">已打开</span>' : ''}</span><span class="shortcut" style="font-size:11px;max-width:250px;overflow:hidden;text-overflow:ellipsis">${this.escapeHtml(relPath)}</span>`;
             el.addEventListener('click', () => {
                 document.getElementById('filePickerOverlay').classList.remove('active');
-                this.openFile(file.path, file.name);
+                this.openFile(fp, name);
             });
             list.appendChild(el);
         });
@@ -1290,11 +1441,8 @@ class IDEApp {
 
     collectAllFiles(node, result) {
         if (!node) return result;
-        if (!node.is_dir) {
-            result.push({ path: node.path, name: node.name });
-        } else if (node.children) {
-            node.children.forEach(c => this.collectAllFiles(c, result));
-        }
+        if (!node.is_dir) result.push({ path: node.path, name: node.name });
+        else if (node.children) node.children.forEach(c => this.collectAllFiles(c, result));
         return result;
     }
 
@@ -1644,9 +1792,33 @@ class IDEApp {
         });
 
         // 文件选择器
-        document.getElementById('filePickerInput').addEventListener('input', e => this.renderFilePicker(e.target.value));
+        document.getElementById('filePickerInput').addEventListener('input', e => {
+            clearTimeout(this._filePickerTimer);
+            this._filePickerTimer = setTimeout(() => this.renderFilePicker(e.target.value), 80);
+        });
         document.getElementById('filePickerInput').addEventListener('keydown', e => {
-            if (e.key === 'Escape') document.getElementById('filePickerOverlay').classList.remove('active');
+            const items = document.querySelectorAll('#filePickerList .cmd-item');
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                this._filePickerIdx = Math.min((this._filePickerIdx || 0) + 1, items.length - 1);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                this._filePickerIdx = Math.max((this._filePickerIdx || 0) - 1, 0);
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                const files = this._filePickerFiles;
+                const idx = this._filePickerIdx || 0;
+                if (files && files[idx]) {
+                    document.getElementById('filePickerOverlay').classList.remove('active');
+                    const fp = files[idx].replace(/\\/g, '/');
+                    this.openFile(fp, fp.split('/').pop());
+                }
+                return;
+            } else if (e.key === 'Escape') {
+                document.getElementById('filePickerOverlay').classList.remove('active');
+                return;
+            }
+            items.forEach((el, i) => el.classList.toggle('selected', i === (this._filePickerIdx || 0)));
         });
         document.getElementById('filePickerOverlay').addEventListener('click', e => {
             if (e.target === document.getElementById('filePickerOverlay')) document.getElementById('filePickerOverlay').classList.remove('active');

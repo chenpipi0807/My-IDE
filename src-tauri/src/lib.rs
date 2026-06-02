@@ -26,6 +26,8 @@ pub fn run() {
             fs::fs_create_dir,
             fs::fs_rename,
             fs::fs_get_cwd,
+            fs::fs_search,
+            fs::fs_find_files,
             // Git
             git::git_status,
             git::git_diff,

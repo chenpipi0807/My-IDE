@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileEntry {
@@ -119,4 +120,93 @@ pub fn fs_get_cwd() -> String {
     std::env::current_dir()
         .map(|p| p.to_string_lossy().replace('\\', "/").to_string())
         .unwrap_or_else(|_| "/".to_string())
+}
+
+#[derive(Debug, Serialize)]
+pub struct SearchResult {
+    pub file: String,
+    pub line: u32,
+    pub content: String,
+}
+
+/// 全局文件内容搜索，供搜索面板使用
+#[tauri::command]
+pub fn fs_search(
+    cwd: String,
+    query: String,
+    case_sensitive: bool,
+) -> Result<Vec<SearchResult>, String> {
+    if query.is_empty() {
+        return Ok(vec![]);
+    }
+    let query_cmp = if case_sensitive {
+        query.clone()
+    } else {
+        query.to_lowercase()
+    };
+
+    let mut results: Vec<SearchResult> = Vec::new();
+    let limit = 500usize;
+
+    for entry in WalkDir::new(&cwd)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            let name = e.file_name().to_string_lossy();
+            !should_ignore(&name) && e.file_type().is_file()
+        })
+    {
+        if results.len() >= limit {
+            break;
+        }
+        // 跳过二进制文件（通过扩展名粗判）
+        let ext = entry.path().extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        if matches!(ext.as_str(), "exe"|"dll"|"so"|"dylib"|"bin"|"png"|"jpg"|"jpeg"|"gif"|
+                    "webp"|"ico"|"pdf"|"zip"|"tar"|"gz"|"7z"|"rar"|"mp4"|"mp3"|"woff"|"woff2"|"ttf") {
+            continue;
+        }
+
+        let content = match std::fs::read_to_string(entry.path()) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        let file_path = entry.path().to_string_lossy().replace('\\', "/").to_string();
+
+        for (idx, line) in content.lines().enumerate() {
+            let line_cmp = if case_sensitive { line.to_string() } else { line.to_lowercase() };
+            if line_cmp.contains(&query_cmp) {
+                results.push(SearchResult {
+                    file: file_path.clone(),
+                    line: (idx + 1) as u32,
+                    content: line.trim().to_string(),
+                });
+                if results.len() >= limit {
+                    break;
+                }
+            }
+        }
+    }
+
+    Ok(results)
+}
+
+/// 获取目录下所有文件路径列表，供 Ctrl+P 快速打开使用
+#[tauri::command]
+pub fn fs_find_files(cwd: String) -> Vec<String> {
+    WalkDir::new(&cwd)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            let name = e.file_name().to_string_lossy();
+            !should_ignore(&name) && e.file_type().is_file()
+        })
+        .take(2000)
+        .map(|e| e.path().to_string_lossy().replace('\\', "/").to_string())
+        .collect()
 }
