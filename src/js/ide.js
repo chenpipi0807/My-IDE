@@ -29,6 +29,24 @@ function langFromPath(path) {
     return LANG_MAP[name.split('.').pop()] || 'plaintext';
 }
 
+// ── 媒体文件类型检测 ───────────────────────────────────────────────────────────
+const MEDIA_MIME = {
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+    webp: 'image/webp', bmp: 'image/bmp', ico: 'image/x-icon', avif: 'image/avif',
+    tiff: 'image/tiff', tif: 'image/tiff', svg: 'image/svg+xml',
+    mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
+    avi: 'video/x-msvideo', ogv: 'video/ogg', mkv: 'video/x-matroska',
+    mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg',
+    flac: 'audio/flac', aac: 'audio/aac', m4a: 'audio/mp4', opus: 'audio/ogg',
+};
+function mediaMime(name) {
+    const ext = name.replace(/\\/g, '/').split('/').pop().toLowerCase().split('.').pop();
+    return MEDIA_MIME[ext] || null;
+}
+function isImage(mime) { return mime?.startsWith('image/'); }
+function isVideo(mime) { return mime?.startsWith('video/'); }
+function isAudio(mime) { return mime?.startsWith('audio/'); }
+
 // ── 文件图标 ─────────────────────────────────────────────────────────────────
 function fileIcon(name, isDir) {
     if (isDir) return '📁';
@@ -190,6 +208,7 @@ class IDEApp {
         await this.initFirstTerminal();
         // 恢复上次工作区
         await this.restoreWorkspace();
+        this.updateAIPanelState();
         document.getElementById('loadingScreen').style.display = 'none';
         this.log('My IDE 已就绪。');
     }
@@ -376,17 +395,54 @@ class IDEApp {
             this.activateTab(normalPath);
             return;
         }
+        const mime = mediaMime(name);
         try {
-            const content = await invoke('fs_read_file', { path: normalPath });
-            this.tabs.push({ path: normalPath, name, dirty: false });
-            this.createEditor(normalPath, content);
+            if (mime) {
+                // 媒体文件：读取 base64 并创建预览
+                const b64 = await invoke('fs_read_file_base64', { path: normalPath });
+                this.tabs.push({ path: normalPath, name, dirty: false, isMedia: true });
+                this.createMediaPreview(normalPath, name, b64, mime);
+            } else {
+                const content = await invoke('fs_read_file', { path: normalPath });
+                this.tabs.push({ path: normalPath, name, dirty: false });
+                this.createEditor(normalPath, content);
+            }
             this.renderTabs();
             this.activateTab(normalPath);
-            document.getElementById('statusLang').textContent = langFromPath(normalPath);
+            document.getElementById('statusLang').textContent = mime ? mime.split('/')[0].toUpperCase() : langFromPath(normalPath);
             this.saveWorkspace();
         } catch (e) {
             this.toast(`无法打开 ${name}: ${e}`, 'error');
         }
+    }
+
+    createMediaPreview(path, name, b64, mime) {
+        const editorArea = document.getElementById('editorArea');
+        const wrapper = document.createElement('div');
+        wrapper.className = 'editor-instance';
+        wrapper.dataset.path = path;
+        const dataUrl = `data:${mime};base64,${b64}`;
+        const ext = name.split('.').pop().toUpperCase();
+
+        let mediaEl = '';
+        if (isImage(mime)) {
+            mediaEl = `<div class="media-preview-img-wrap"><img class="media-preview-img" src="${dataUrl}" alt="${name}" draggable="false"></div>`;
+        } else if (isVideo(mime)) {
+            mediaEl = `<video controls preload="metadata" style="max-width:100%"><source src="${dataUrl}" type="${mime}"></video>`;
+        } else if (isAudio(mime)) {
+            mediaEl = `<audio controls style="width:100%"><source src="${dataUrl}" type="${mime}"></audio>`;
+        }
+
+        wrapper.innerHTML = `<div class="media-preview">
+            ${mediaEl}
+            <div class="media-info">
+                <span>${name}</span>
+                <span>${ext} · ${(b64.length * 3 / 4 / 1024).toFixed(1)} KB</span>
+            </div>
+        </div>`;
+
+        editorArea.appendChild(wrapper);
+        this.editors.set(path, { isMedia: true, el: wrapper });
     }
 
     activateTab(path) {
@@ -398,7 +454,10 @@ class IDEApp {
         document.getElementById('emptyEditor').style.display = 'none';
         const editor = this.editors.get(path);
         if (editor?.layout) setTimeout(() => editor.layout(), 0);
-        document.getElementById('statusLang').textContent = langFromPath(path);
+        const mime = mediaMime(path.split('/').pop());
+        document.getElementById('statusLang').textContent = mime
+            ? mime.split('/')[0].toUpperCase()
+            : langFromPath(path);
     }
 
     renderTabs() {
@@ -419,7 +478,7 @@ class IDEApp {
 
     async saveFile(path) {
         const editor = this.editors.get(path);
-        if (!editor) return;
+        if (!editor || editor.isMedia) return;
         const content = editor.getValue ? editor.getValue() : (editor.el ? editor.el.textContent : '');
         try {
             await invoke('fs_write_file', { path, content });
@@ -631,9 +690,23 @@ class IDEApp {
         await this.createTerminal(cwd);
     }
 
-    async createTerminal(cwd) {
+    _getSelectedShell() {
+        const sel = document.getElementById('terminalShellSelect');
+        const v = sel?.value || 'cmd';
+        const shellPaths = {
+            cmd: 'cmd.exe',
+            powershell: 'powershell.exe',
+            pwsh: 'pwsh.exe',
+            bash: navigator.platform.startsWith('Win') ? 'C:\\Program Files\\Git\\bin\\bash.exe' : '/bin/bash',
+            zsh: '/bin/zsh',
+        };
+        return { name: v, path: shellPaths[v] || v };
+    }
+
+    async createTerminal(cwd, shellOverride) {
         if (!window.Terminal) { this.log('xterm.js 未加载，终端不可用'); return; }
-        const id = await invoke('terminal_create', { cwd });
+        const shell = shellOverride || this._getSelectedShell();
+        const id = await invoke('terminal_create', { cwd, shell: shell.path });
 
         const term = new Terminal({
             fontFamily: '"Cascadia Code","Fira Code",Consolas,monospace',
@@ -657,8 +730,7 @@ class IDEApp {
         const tabEl = document.createElement('div');
         tabEl.className = 'terminal-tab';
         tabEl.dataset.termId = id;
-        const shellName = navigator.platform.startsWith('Win') ? 'cmd' : 'bash';
-        tabEl.innerHTML = `${shellName} <span class="terminal-tab-close">✕</span>`;
+        tabEl.innerHTML = `${shell.name} <span class="terminal-tab-close">✕</span>`;
         tabEl.addEventListener('click', e => {
             if (e.target.classList.contains('terminal-tab-close')) { this.closeTerminal(id); return; }
             this.activateTerminal(id);
@@ -1214,6 +1286,29 @@ class IDEApp {
         document.getElementById('settingsAutoSave').checked = this.config.auto_save || false;
         document.getElementById('settingsWordWrap').checked = this.config.word_wrap || false;
         document.getElementById('settingsSystemPrompt').value = this.config.system_prompt || '';
+        this.updateAIPanelState();
+    }
+
+    updateAIPanelState() {
+        const model = this.config.deepseek_model || 'deepseek-v4-flash';
+        const hasKey = !!(this.config.deepseek_api_key);
+        const hasKimi = !!(this.config.kimi_api_key);
+        // 快速模型选择器
+        const qs = document.getElementById('aiModelQuick');
+        if (qs) qs.value = model;
+        // API key 状态指示
+        const dot = document.getElementById('aiKeyDot');
+        if (dot) { dot.className = 'ai-qs-keydot ' + (hasKey ? 'ok' : 'err'); dot.title = hasKey ? 'API Key 已配置' : 'API Key 未配置'; }
+        // 输入框 placeholder 和粘贴提示
+        const input = document.getElementById('aiInput');
+        if (input) {
+            input.placeholder = hasKimi
+                ? '向 AI 提问... (Shift+Enter 换行，可粘贴/拖入图片)'
+                : '向 AI 提问... (Shift+Enter 换行，配置 Kimi Key 可粘贴图片)';
+        }
+        // 状态栏模型
+        const labels = { 'deepseek-v4-flash': 'Flash(思考)', 'deepseek-v4-flash-nothink': 'Flash(极速)', 'deepseek-v4-pro': 'Pro(思考)', 'deepseek-v4-pro-nothink': 'Pro(快速)' };
+        document.getElementById('statusModel').textContent = labels[model] || model;
     }
 
     async saveSettings() {
@@ -1250,6 +1345,7 @@ class IDEApp {
                     });
                 }
             });
+            this.updateAIPanelState();
             this.toast('设置已保存', 'success');
         } catch (e) {
             this.toast(`保存设置失败: ${e}`, 'error');
@@ -1653,20 +1749,38 @@ class IDEApp {
         document.getElementById('aiNewSession').addEventListener('click', () => this.newSession());
         this.renderSessionTabs();
 
-        // AI 输入粘贴图片
+        // AI 快速模型选择器
+        document.getElementById('aiModelQuick').addEventListener('change', e => {
+            this.config.deepseek_model = e.target.value;
+            invoke('config_save', { config: this.config }).catch(() => {});
+            this.updateAIPanelState();
+            this.toast(`模型已切换: ${e.target.value}`);
+        });
+        // AI 面板打开设置
+        document.getElementById('aiOpenSettings').addEventListener('click', () => {
+            document.querySelector('.activity-btn[data-view="settings"]')?.click();
+        });
+
+        // AI 输入粘贴图片（需要 Kimi Key）
         document.getElementById('aiInput').addEventListener('paste', e => {
             const items = e.clipboardData?.items;
             if (!items) return;
             for (const item of items) {
                 if (item.type.startsWith('image/')) {
                     e.preventDefault();
+                    if (!this.config.kimi_api_key) {
+                        this.toast('请先在设置中配置 Kimi API Key 以使用图片分析', 'warning');
+                        return;
+                    }
+                    const file = item.getAsFile();
                     const reader = new FileReader();
                     reader.onload = ev => {
                         this.attachedImage = ev.target.result.split(',')[1];
                         document.getElementById('aiImageThumb').src = ev.target.result;
+                        document.getElementById('aiImageName').textContent = file?.name || '截图';
                         document.getElementById('aiImagePreview').style.display = 'flex';
                     };
-                    reader.readAsDataURL(item.getAsFile());
+                    reader.readAsDataURL(file);
                     break;
                 }
             }
@@ -1679,6 +1793,27 @@ class IDEApp {
         document.getElementById('aiImageRemove').addEventListener('click', () => {
             this.attachedImage = null;
             document.getElementById('aiImagePreview').style.display = 'none';
+        });
+
+        // AI 输入区拖入图片（需要 Kimi Key）
+        const aiInputArea = document.getElementById('aiInput');
+        aiInputArea.addEventListener('dragover', e => e.preventDefault());
+        aiInputArea.addEventListener('drop', e => {
+            e.preventDefault();
+            const file = [...(e.dataTransfer?.files || [])].find(f => f.type.startsWith('image/'));
+            if (!file) return;
+            if (!this.config.kimi_api_key) {
+                this.toast('请先在设置中配置 Kimi API Key 以使用图片分析', 'warning');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = ev => {
+                this.attachedImage = ev.target.result.split(',')[1];
+                document.getElementById('aiImageThumb').src = ev.target.result;
+                document.getElementById('aiImageName').textContent = file.name;
+                document.getElementById('aiImagePreview').style.display = 'flex';
+            };
+            reader.readAsDataURL(file);
         });
 
         // 添加文件到上下文（通过 renderContextBar 动态注册）

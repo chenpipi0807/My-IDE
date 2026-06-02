@@ -23,6 +23,7 @@ fn default_shell() -> String {
 pub fn terminal_create(
     app: AppHandle,
     cwd: String,
+    shell: Option<String>,
     state: tauri::State<'_, PtyStore>,
 ) -> Result<String, String> {
     let id = Uuid::new_v4().to_string();
@@ -38,7 +39,7 @@ pub fn terminal_create(
         })
         .map_err(|e| format!("Failed to open PTY: {}", e))?;
 
-    let shell = default_shell();
+    let shell = shell.unwrap_or_else(default_shell);
     let mut cmd = CommandBuilder::new(&shell);
     cmd.cwd(&cwd);
 

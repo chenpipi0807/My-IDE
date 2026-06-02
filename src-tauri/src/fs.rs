@@ -210,3 +210,11 @@ pub fn fs_find_files(cwd: String) -> Vec<String> {
         .map(|e| e.path().to_string_lossy().replace('\\', "/").to_string())
         .collect()
 }
+
+/// 读取文件为 base64 字符串，用于图片/视频/音频预览
+#[tauri::command]
+pub fn fs_read_file_base64(path: String) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+    Ok(STANDARD.encode(bytes))
+}

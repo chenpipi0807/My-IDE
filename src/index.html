@@ -219,6 +219,21 @@
                 </div>
             </div>
 
+            <!-- 快速设置栏 -->
+            <div class="ai-quick-settings" id="aiQuickSettings">
+                <div class="ai-qs-row">
+                    <span class="ai-qs-label">模型</span>
+                    <select class="ai-qs-select" id="aiModelQuick">
+                        <option value="deepseek-v4-flash">Flash（思考）</option>
+                        <option value="deepseek-v4-flash-nothink">Flash（极速）</option>
+                        <option value="deepseek-v4-pro">Pro（思考）</option>
+                        <option value="deepseek-v4-pro-nothink">Pro（快速）</option>
+                    </select>
+                    <span class="ai-qs-keydot" id="aiKeyDot" title="API Key 状态">●</span>
+                    <button class="ai-qs-settings-link" id="aiOpenSettings" title="打开设置">⚙</button>
+                </div>
+            </div>
+
             <!-- 会话 tab 栏 -->
             <div class="ai-sessions-bar" id="aiSessionsBar">
                 <div class="ai-session-tab active" data-session="0">对话 1</div>
@@ -241,10 +256,11 @@
                 </div>
                 <div id="aiImagePreview" style="display:none" class="ai-image-preview">
                     <img id="aiImageThumb" class="ai-image-thumb" src="" alt="">
+                    <span id="aiImageName" class="ai-image-name"></span>
                     <button class="ai-image-remove" id="aiImageRemove">✕</button>
                 </div>
                 <div class="ai-input-row">
-                    <textarea class="ai-input" id="aiInput" placeholder="向 AI 提问... (粘贴图片，Shift+Enter 换行)" rows="1"></textarea>
+                    <textarea class="ai-input" id="aiInput" placeholder="向 AI 提问... (Shift+Enter 换行)" rows="1"></textarea>
                     <button class="ai-send-btn" id="aiSendBtn">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
@@ -269,7 +285,13 @@
             <div class="panel-view active" id="panel-terminal">
                 <div class="terminal-wrap">
                     <div class="terminal-tabs" id="terminalTabs">
-                        <span class="new-terminal-btn" id="newTerminalBtn" title="新建终端">+</span>
+                        <span class="new-terminal-btn" id="newTerminalBtn" title="新建终端 (cmd)">+</span>
+                        <select class="terminal-shell-select" id="terminalShellSelect" title="选择 Shell">
+                            <option value="cmd">cmd</option>
+                            <option value="powershell">PowerShell</option>
+                            <option value="pwsh">pwsh</option>
+                            <option value="bash">bash</option>
+                        </select>
                     </div>
                     <div class="terminal-body" id="terminalBody"></div>
                 </div>

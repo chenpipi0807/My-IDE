@@ -637,6 +637,108 @@ kbd { background: var(--hover); border: 1px solid var(--border); border-radius: 
     border-radius: 4px;
 }
 .new-terminal-btn:hover { background: var(--hover); color: var(--fg); }
+.terminal-shell-select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    outline: none;
+    margin-left: 4px;
+}
+.terminal-shell-select:hover { border-color: var(--accent); }
+
+/* AI 快速设置栏 */
+.ai-quick-settings {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--ai-panel-border);
+    background: rgba(0,0,0,0.12);
+    flex-shrink: 0;
+}
+.ai-qs-row { display: flex; align-items: center; gap: 8px; }
+.ai-qs-label { font-size: 11px; color: var(--fg-dim); white-space: nowrap; }
+.ai-qs-select {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-size: 11px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    outline: none;
+    cursor: pointer;
+}
+.ai-qs-select:focus { border-color: var(--accent); }
+.ai-qs-keydot { font-size: 14px; line-height: 1; flex-shrink: 0; }
+.ai-qs-keydot.ok { color: #4ec9b0; }
+.ai-qs-keydot.err { color: var(--error); }
+.ai-qs-settings-link {
+    background: none;
+    border: none;
+    color: var(--fg-dim);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+.ai-qs-settings-link:hover { background: var(--hover); color: var(--fg); }
+
+/* 图片预览文件名 */
+.ai-image-name { font-size: 11px; color: var(--fg-dim); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 媒体文件预览 (图片/视频/音频) */
+.media-preview {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    overflow: auto;
+    padding: 24px;
+    box-sizing: border-box;
+    gap: 12px;
+}
+.media-preview-img-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    overflow: hidden;
+    max-width: 100%;
+    /* Checkerboard for transparency */
+    background-image:
+        linear-gradient(45deg, #555 25%, transparent 25%),
+        linear-gradient(-45deg, #555 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #555 75%),
+        linear-gradient(-45deg, transparent 75%, #555 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+    background-color: #3a3a3a;
+}
+.media-preview-img {
+    max-width: 100%;
+    max-height: calc(100vh - 200px);
+    display: block;
+    image-rendering: auto;
+}
+.media-preview video, .media-preview audio {
+    max-width: 100%;
+    border-radius: 6px;
+    outline: none;
+}
+.media-preview video { max-height: calc(100vh - 200px); background: #000; }
+.media-info {
+    font-size: 12px;
+    color: var(--fg-dim);
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
 .output-content { padding: 8px 12px; font-family: var(--font-mono); font-size: 12px; line-height: 1.6; color: var(--fg-dim); white-space: pre-wrap; }
 
 /* ── 状态栏 ── */

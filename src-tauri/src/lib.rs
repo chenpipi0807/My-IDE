@@ -28,6 +28,7 @@ pub fn run() {
             fs::fs_get_cwd,
             fs::fs_search,
             fs::fs_find_files,
+            fs::fs_read_file_base64,
             // Git
             git::git_status,
             git::git_diff,
