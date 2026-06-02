@@ -115,18 +115,18 @@
                         <div class="settings-group">
                             <label class="settings-label">DeepSeek 模型</label>
                             <select class="settings-select" id="settingsModel">
-                                <optgroup label="── 通用对话 ──">
-                                    <option value="deepseek-chat">deepseek-chat（最新 V3 系列，自动升级）</option>
-                                    <option value="deepseek-v3-0324">deepseek-v3-0324（V3 3月版，稳定）</option>
+                                <optgroup label="── Flash（快速，2元/M输出）──">
+                                    <option value="deepseek-v4-flash">deepseek-v4-flash（思考模式，推荐）</option>
+                                    <option value="deepseek-v4-flash-nothink">deepseek-v4-flash（关闭思考，极速）</option>
                                 </optgroup>
-                                <optgroup label="── 推理思考 ──">
-                                    <option value="deepseek-reasoner">deepseek-reasoner（最新 R1，自动升级）</option>
-                                    <option value="deepseek-r1-0528">deepseek-r1-0528（R1 5月版，最强推理）</option>
+                                <optgroup label="── Pro（旗舰，6元/M输出）──">
+                                    <option value="deepseek-v4-pro">deepseek-v4-pro（思考模式，最强）</option>
+                                    <option value="deepseek-v4-pro-nothink">deepseek-v4-pro（关闭思考，旗舰速度）</option>
                                 </optgroup>
                             </select>
                             <div class="settings-desc" style="margin-top:6px">
-                                💡 "自动升级"版本始终使用最新模型；固定版本号保持稳定行为。<br>
-                                R1 系列会显示思考过程，响应慢但准确，费用约 10x。
+                                💡 思考模式默认开启，先输出思维链再给答案，更准确。<br>
+                                旧模型名（deepseek-chat/reasoner）7月24日后将弃用。
                             </div>
                         </div>
                         <div class="settings-group">
@@ -291,7 +291,7 @@
         </div>
         <div class="status-right">
             <span class="status-item status-wordwrap" id="statusWordWrap" title="切换自动换行">换行: 关</span>
-            <span class="status-item" id="statusModel" title="AI 模型">deepseek-chat</span>
+            <span class="status-item" id="statusModel" title="AI 模型">deepseek-v4-flash</span>
             <span class="status-item" id="statusLang" title="语言">—</span>
             <span class="status-item" id="statusCursor" title="行列">第 1 行，第 1 列</span>
         </div>

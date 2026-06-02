@@ -438,6 +438,40 @@ kbd { background: var(--hover); border: 1px solid var(--border); border-radius: 
 .ai-thinking-dots::after { content: '.'; animation: thinking-dots 1.2s infinite; }
 @keyframes thinking-dots { 0%,100%{content:'.'} 33%{content:'..'} 66%{content:'...'} }
 
+/* 思维链 (thinking mode) */
+.ai-reasoning {
+    margin: 0 12px 6px;
+    border: 1px solid var(--ai-panel-border);
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--fg-dim);
+    background: rgba(0,0,0,0.15);
+}
+.ai-reasoning summary {
+    padding: 4px 8px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+}
+.ai-reasoning summary::-webkit-details-marker { display: none; }
+.ai-reasoning summary::before { content: '▶'; font-size: 9px; transition: transform 0.15s; }
+.ai-reasoning[open] summary::before { transform: rotate(90deg); }
+.ai-reasoning-tokens { font-weight: normal; opacity: 0.7; }
+.ai-reasoning-body {
+    padding: 6px 8px 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: inherit;
+    line-height: 1.5;
+    max-height: 200px;
+    overflow-y: auto;
+    border-top: 1px solid var(--ai-panel-border);
+}
+
 /* Token 统计栏 */
 .ai-token-bar {
     display: flex;

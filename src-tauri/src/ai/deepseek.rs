@@ -55,7 +55,14 @@ pub async fn ai_chat_deepseek(
 
     let api_key = config["deepseek_api_key"].as_str().unwrap_or("").to_string();
     let proxy = config["proxy"].as_str().unwrap_or("").to_string();
-    let model = config["deepseek_model"].as_str().unwrap_or("deepseek-chat").to_string();
+    let raw_model = config["deepseek_model"].as_str().unwrap_or("deepseek-v4-flash").to_string();
+
+    // Strip -nothink suffix to get the actual API model name
+    let (model, thinking_disabled) = if raw_model.ends_with("-nothink") {
+        (raw_model.trim_end_matches("-nothink").to_string(), true)
+    } else {
+        (raw_model, false)
+    };
 
     if api_key.is_empty() {
         return Err("DeepSeek API key 未配置，请在设置中填写。".to_string());
@@ -69,6 +76,10 @@ pub async fn ai_chat_deepseek(
         "stream": true,
         "temperature": 0.0,
     });
+
+    if thinking_disabled {
+        body["thinking"] = json!({"type": "disabled"});
+    }
 
     if let Some(ref t) = tools {
         if !t.is_empty() {
@@ -119,14 +130,23 @@ pub async fn ai_chat_deepseek(
                     let choice = &val["choices"][0];
                     let delta = &choice["delta"];
 
-                    // Text content
+                    // Text content + reasoning_content (thinking mode)
+                    let mut delta_data = serde_json::Map::new();
                     if let Some(content) = delta["content"].as_str() {
                         if !content.is_empty() {
-                            let _ = app.emit(
-                                &format!("ai_delta:{}", request_id),
-                                json!({ "content": content }),
-                            );
+                            delta_data.insert("content".to_string(), json!(content));
                         }
+                    }
+                    if let Some(reasoning) = delta["reasoning_content"].as_str() {
+                        if !reasoning.is_empty() {
+                            delta_data.insert("reasoning".to_string(), json!(reasoning));
+                        }
+                    }
+                    if !delta_data.is_empty() {
+                        let _ = app.emit(
+                            &format!("ai_delta:{}", request_id),
+                            Value::Object(delta_data),
+                        );
                     }
 
                     // Tool call fragments

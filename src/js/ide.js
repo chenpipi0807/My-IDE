@@ -177,7 +177,7 @@ class IDEApp {
             this.config = {
                 theme: 'vs-dark', font_size: 14, font_family: 'Cascadia Code,Fira Code,Consolas,monospace',
                 tab_size: 4, auto_save: false, word_wrap: false,
-                agent_mode: 'approval', deepseek_model: 'deepseek-chat',
+                agent_mode: 'approval', deepseek_model: 'deepseek-v4-flash',
                 deepseek_api_key: '', kimi_api_key: '', proxy: '',
                 system_prompt: '',
             };
@@ -816,9 +816,10 @@ class IDEApp {
         if (!session) return;
         const tokens = session.tokens || 0;
         document.getElementById('aiTokenCount').textContent = `${tokens.toLocaleString()} tokens`;
-        const model = this.config.deepseek_model || 'deepseek-chat';
-        const costPerToken = model === 'deepseek-reasoner' ? 0.000010 : 0.0000014;
-        const cost = tokens * costPerToken;
+        const model = this.config.deepseek_model || 'deepseek-v4-flash';
+        // Output pricing: Pro=6元/M, Flash=2元/M (thinking mode has same price)
+        const costPerMillion = (model.startsWith('deepseek-v4-pro') || model === 'deepseek-reasoner') ? 6 : 2;
+        const cost = tokens * (costPerMillion / 1_000_000);
         document.getElementById('aiCostEstimate').textContent = `≈ ¥${cost.toFixed(4)}`;
     }
 
@@ -980,7 +981,10 @@ class IDEApp {
         const msgs = document.getElementById('aiMsgs');
 
         let assistantText = '';
+        let reasoningText = '';
+        let lastReasoningContent = '';
         let msgEl = null;
+        let reasoningEl = null;
         let pendingToolCall = null;
 
         const cleanup = () => {
@@ -996,8 +1000,23 @@ class IDEApp {
                 msgEl.innerHTML = `<div class="ai-msg-body"></div>`;
                 msgs.appendChild(msgEl);
             }
-            assistantText += e.payload.content;
-            msgEl.querySelector('.ai-msg-body').innerHTML = renderMarkdown(assistantText);
+            if (e.payload.reasoning) {
+                reasoningText += e.payload.reasoning;
+                lastReasoningContent += e.payload.reasoning;
+                if (!reasoningEl) {
+                    reasoningEl = document.createElement('details');
+                    reasoningEl.className = 'ai-reasoning';
+                    reasoningEl.innerHTML = `<summary>思维链 <span class="ai-reasoning-tokens"></span></summary><div class="ai-reasoning-body"></div>`;
+                    msgEl.insertBefore(reasoningEl, msgEl.querySelector('.ai-msg-body'));
+                }
+                reasoningEl.querySelector('.ai-reasoning-body').textContent = reasoningText;
+                const rTokens = Math.ceil(reasoningText.length / 3);
+                reasoningEl.querySelector('.ai-reasoning-tokens').textContent = `(~${rTokens} tokens)`;
+            }
+            if (e.payload.content) {
+                assistantText += e.payload.content;
+                msgEl.querySelector('.ai-msg-body').innerHTML = renderMarkdown(assistantText);
+            }
             msgs.scrollTop = msgs.scrollHeight;
         });
         this.aiListeners.push(deltaUnlisten);
@@ -1031,7 +1050,9 @@ class IDEApp {
                     cardEl.querySelector('.ai-tool-status').textContent = '✓ 完成';
                     cardEl.querySelector('.ai-tool-status').className = 'ai-tool-status done';
 
-                    session.messages.push({ role: 'assistant', content: null, tool_calls: [{ id: tc.id, type: 'function', function: { name: tc.name, arguments: tc.arguments } }] });
+                    const assistantMsg = { role: 'assistant', content: null, tool_calls: [{ id: tc.id, type: 'function', function: { name: tc.name, arguments: tc.arguments } }] };
+                    if (lastReasoningContent) assistantMsg.reasoning_content = lastReasoningContent;
+                    session.messages.push(assistantMsg);
                     session.messages.push({ role: 'tool', content: String(result), tool_call_id: tc.id });
 
                     // 继续对话
@@ -1185,7 +1206,7 @@ class IDEApp {
         document.getElementById('settingsDeepseekKey').value = this.config.deepseek_api_key || '';
         document.getElementById('settingsKimiKey').value = this.config.kimi_api_key || '';
         document.getElementById('settingsProxy').value = this.config.proxy || '';
-        document.getElementById('settingsModel').value = this.config.deepseek_model || 'deepseek-chat';
+        document.getElementById('settingsModel').value = this.config.deepseek_model || 'deepseek-v4-flash';
         document.getElementById('settingsTheme').value = this.config.theme || 'vs-dark';
         document.getElementById('settingsFontSize').value = String(this.config.font_size || 14);
         document.getElementById('settingsFont').value = this.config.font_family || 'Cascadia Code,Fira Code,Consolas,monospace';
@@ -1718,10 +1739,14 @@ class IDEApp {
         document.getElementById('statusFolder').addEventListener('click', () => this.openFolderDialog());
         document.getElementById('statusWordWrap').addEventListener('click', () => this.toggleWordWrap());
         document.getElementById('statusModel').addEventListener('click', () => {
-            this.config.deepseek_model = this.config.deepseek_model === 'deepseek-chat' ? 'deepseek-reasoner' : 'deepseek-chat';
-            document.getElementById('statusModel').textContent = this.config.deepseek_model;
+            const cycle = ['deepseek-v4-flash', 'deepseek-v4-flash-nothink', 'deepseek-v4-pro', 'deepseek-v4-pro-nothink'];
+            const cur = this.config.deepseek_model || 'deepseek-v4-flash';
+            const idx = cycle.indexOf(cur);
+            this.config.deepseek_model = cycle[(idx + 1) % cycle.length];
+            const labels = { 'deepseek-v4-flash': 'Flash(思考)', 'deepseek-v4-flash-nothink': 'Flash(极速)', 'deepseek-v4-pro': 'Pro(思考)', 'deepseek-v4-pro-nothink': 'Pro(快速)' };
+            document.getElementById('statusModel').textContent = labels[this.config.deepseek_model] || this.config.deepseek_model;
             invoke('config_save', { config: this.config }).catch(() => {});
-            this.toast(`已切换模型: ${this.config.deepseek_model}`);
+            this.toast(`已切换: ${this.config.deepseek_model}`);
         });
 
         // 搜索
