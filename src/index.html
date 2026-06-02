@@ -115,9 +115,19 @@
                         <div class="settings-group">
                             <label class="settings-label">DeepSeek 模型</label>
                             <select class="settings-select" id="settingsModel">
-                                <option value="deepseek-chat">deepseek-chat (V3，便宜)</option>
-                                <option value="deepseek-reasoner">deepseek-reasoner (R1，推理)</option>
+                                <optgroup label="── 通用对话 ──">
+                                    <option value="deepseek-chat">deepseek-chat（最新 V3 系列，自动升级）</option>
+                                    <option value="deepseek-v3-0324">deepseek-v3-0324（V3 3月版，稳定）</option>
+                                </optgroup>
+                                <optgroup label="── 推理思考 ──">
+                                    <option value="deepseek-reasoner">deepseek-reasoner（最新 R1，自动升级）</option>
+                                    <option value="deepseek-r1-0528">deepseek-r1-0528（R1 5月版，最强推理）</option>
+                                </optgroup>
                             </select>
+                            <div class="settings-desc" style="margin-top:6px">
+                                💡 "自动升级"版本始终使用最新模型；固定版本号保持稳定行为。<br>
+                                R1 系列会显示思考过程，响应慢但准确，费用约 10x。
+                            </div>
                         </div>
                         <div class="settings-group">
                             <label class="settings-label">AI 系统提示词</label>
